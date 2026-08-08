@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0f2746" />
+    <meta name="description" content="Logseq 화재안전기술기준·점검표 문제와 니모닉 모바일 학습카드" />
+    <title>소방 니모닉 카드</title>
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./icon-192.png" />
+    <link rel="stylesheet" href="./styles.css?v=1" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="app-header">
+        <button class="brand" type="button" data-go-home aria-label="처음 화면으로">
+          <span class="brand-icon" aria-hidden="true">火</span>
+          <span>
+            <strong>소방 니모닉 카드</strong>
+            <small>문제만 보고, 니모닉으로 회상</small>
+          </span>
+        </button>
+        <div class="header-actions">
+          <button class="icon-button install-button" type="button" data-install hidden>앱 설치</button>
+          <button class="icon-button" type="button" data-open-settings aria-label="학습 설정">설정</button>
+        </div>
+      </header>
+
+      <main>
+        <section class="screen home-screen is-active" data-screen="home">
+          <section class="hero-panel">
+            <p class="eyebrow">LOGSEQ → MOBILE STUDY</p>
+            <h1>길게 쓰기 전에<br /><em>니모닉부터 정확하게</em></h1>
+            <p class="hero-copy">
+              화재안전기술기준과 점검표에서 문제와 니모닉만 가져왔습니다. 문제를 소리 내어 풀고 니모닉을 확인하세요.
+            </p>
+          </section>
+
+          <section class="stats-grid" aria-label="학습 현황">
+            <article><span>오늘 복습</span><strong data-due-count>0</strong></article>
+            <article><span>새 카드</span><strong data-new-count>0</strong></article>
+            <article><span>학습 완료</span><strong data-learned-count>0</strong></article>
+          </section>
+
+          <section class="study-panel">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">STUDY SET</p>
+                <h2>학습 범위</h2>
+              </div>
+              <span class="data-badge" data-total-badge>0문제</span>
+            </div>
+
+            <div class="source-tabs" role="group" aria-label="자료 선택">
+              <button class="is-selected" type="button" data-source="화재안전기술기준">화재안전기술기준</button>
+              <button type="button" data-source="점검표">점검표</button>
+              <button type="button" data-source="전체">전체</button>
+            </div>
+
+            <label class="field-label" for="subject-select">세부 과목</label>
+            <select id="subject-select" data-subject-select>
+              <option value="전체">전체 과목</option>
+            </select>
+
+            <label class="search-field">
+              <span>문제 검색</span>
+              <input type="search" placeholder="예: 송수구, 비상전원, 스프링클러" data-search />
+            </label>
+
+            <label class="toggle-row">
+              <span>
+                <strong>니모닉 있는 카드만</strong>
+                <small>답안 전체와 이미지는 표시하지 않습니다.</small>
+              </span>
+              <input type="checkbox" data-mnemonic-only checked />
+            </label>
+
+            <div class="primary-actions">
+              <button class="primary-button" type="button" data-start-due>
+                <span>오늘 학습 시작</span>
+                <small data-due-button-copy>복습·새 카드 순서</small>
+              </button>
+              <button class="secondary-button" type="button" data-start-random>무작위 연습</button>
+            </div>
+          </section>
+
+          <section class="guide-panel">
+            <h2>직장인용 30초 학습법</h2>
+            <ol>
+              <li><b>10초</b> 문제를 보고 니모닉을 떠올립니다.</li>
+              <li><b>20초</b> 니모닉을 풀어 핵심 항목을 말합니다.</li>
+              <li>숫자·단위·예외가 흐리면 <b>다시</b>를 누릅니다.</li>
+            </ol>
+          </section>
+        </section>
+
+        <section class="screen study-screen" data-screen="study" hidden>
+          <div class="study-topbar">
+            <button class="back-button" type="button" data-exit-study>← 나가기</button>
+            <div class="progress-copy"><strong data-progress>1 / 10</strong><small data-study-kind></small></div>
+          </div>
+          <div class="progress-track" aria-hidden="true"><span data-progress-bar></span></div>
+
+          <article class="flashcard" data-flashcard>
+            <div class="card-meta">
+              <span class="card-number" data-card-number>001</span>
+              <span class="subject-chip" data-card-subject></span>
+            </div>
+            <section class="question-side">
+              <p class="side-label">문제</p>
+              <h2 data-question></h2>
+              <p class="think-guide" data-think-guide>니모닉을 먼저 떠올리고, 핵심 항목을 소리 내어 말해보세요.</p>
+            </section>
+            <section class="mnemonic-side" data-mnemonic-side hidden>
+              <p class="side-label">니모닉</p>
+              <div class="mnemonic-text" data-mnemonic></div>
+            </section>
+          </article>
+
+          <div class="study-controls">
+            <button class="reveal-button" type="button" data-reveal>니모닉 확인</button>
+            <div class="rating-grid" data-rating-grid hidden>
+              <button class="rating-button again" type="button" data-rating="again"><b>다시</b><small>기억 안 남</small></button>
+              <button class="rating-button hard" type="button" data-rating="hard"><b>어려움</b><small>일부만 기억</small></button>
+              <button class="rating-button good" type="button" data-rating="good"><b>알겠음</b><small>정확히 설명</small></button>
+            </div>
+          </div>
+
+          <p class="keyboard-help">PC 단축키: Space 니모닉 · 1 다시 · 2 어려움 · 3 알겠음</p>
+        </section>
+
+        <section class="screen finish-screen" data-screen="finish" hidden>
+          <section class="finish-card">
+            <div class="finish-mark" aria-hidden="true">✓</div>
+            <p class="eyebrow">SESSION COMPLETE</p>
+            <h1>오늘 학습을 마쳤습니다</h1>
+            <p data-finish-copy></p>
+            <div class="result-grid">
+              <article><span>다시</span><strong data-result-again>0</strong></article>
+              <article><span>어려움</span><strong data-result-hard>0</strong></article>
+              <article><span>알겠음</span><strong data-result-good>0</strong></article>
+            </div>
+            <button class="primary-button" type="button" data-go-home>처음 화면</button>
+            <button class="text-button" type="button" data-repeat-session>같은 범위 다시 연습</button>
+          </section>
+        </section>
+      </main>
+
+      <footer class="app-footer">
+        <span data-offline-state>오프라인 학습 준비 중</span>
+        <span data-data-version></span>
+      </footer>
+    </div>
+
+    <div class="modal" data-settings-modal hidden>
+      <button class="modal-backdrop" type="button" data-close-settings aria-label="설정 닫기"></button>
+      <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+        <div class="modal-heading">
+          <div><p class="eyebrow">SETTINGS</p><h2 id="settings-title">학습 설정</h2></div>
+          <button class="modal-close" type="button" data-close-settings aria-label="닫기">×</button>
+        </div>
+        <label class="field-label" for="session-limit">한 번에 학습할 카드 수</label>
+        <select id="session-limit" data-session-limit>
+          <option value="10">10장</option>
+          <option value="20" selected>20장</option>
+          <option value="30">30장</option>
+          <option value="50">50장</option>
+        </select>
+        <button class="danger-button" type="button" data-reset-progress>저장된 학습 진도 초기화</button>
+        <p class="settings-note">진도는 이 기기의 브라우저에만 저장됩니다. Logseq 원문은 변경되지 않습니다.</p>
+      </section>
+    </div>
+
+    <div class="toast" data-toast hidden></div>
+
+    <script src="./cards-data.js?v=1"></script>
+    <script src="./app.js?v=1"></script>
+  </body>
+</html>
