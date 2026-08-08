@@ -7,10 +7,10 @@
   const SETTINGS_KEY = "fire-study-settings-v1";
   const RELEASE_KEY = "fire-study-release-seen";
   const APP_RELEASE = {
-    id: "2026-08-08-listening-v1",
+    id: "2026-08-08-listening-v2",
     date: "2026-08-08",
     label: "2026.08.08",
-    note: "과목별 반복 듣기 기능 추가"
+    note: "반복 듣기 음성 안내 개선"
   };
   const DAY = 24 * 60 * 60 * 1000;
   const MINUTE = 60 * 1000;
@@ -341,7 +341,7 @@
     dom.listenCountdown.hidden = true;
     dom.listenMnemonicBox.hidden = false;
     setListenPhase("니모닉 1번째 듣는 중");
-    if (!(await speakText(`니모닉. ${card.mnemonic}`, 0.88, sequence))) return;
+    if (!(await speakText(card.mnemonic, 0.88, sequence))) return;
     if (!(await listenDelay(650, sequence))) return;
     setListenPhase("니모닉 2번째 듣는 중");
     if (!(await speakText(card.mnemonic, 0.85, sequence))) return;
