@@ -9,7 +9,7 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./icon-192.png" />
-    <link rel="stylesheet" href="./styles.css?v=1" />
+    <link rel="stylesheet" href="./styles.css?v=2" />
   </head>
   <body>
     <div class="app-shell">
@@ -83,6 +83,10 @@
               </button>
               <button class="secondary-button" type="button" data-start-random>무작위 연습</button>
             </div>
+            <button class="listen-start-button" type="button" data-start-listening>
+              <span class="listen-start-icon" aria-hidden="true">▶</span>
+              <span><b>선택 과목 반복 듣기</b><small>문제 낭독 → 10초 회상 → 니모닉 2회</small></span>
+            </button>
           </section>
 
           <section class="guide-panel">
@@ -130,6 +134,39 @@
           <p class="keyboard-help">PC 단축키: Space 니모닉 · 1 다시 · 2 어려움 · 3 알겠음</p>
         </section>
 
+        <section class="screen listening-screen" data-screen="listening" hidden>
+          <div class="study-topbar">
+            <button class="back-button" type="button" data-stop-listening>■ 듣기 종료</button>
+            <div class="progress-copy">
+              <strong data-listen-progress>1 / 10</strong>
+              <small data-listen-cycle>1회차</small>
+            </div>
+          </div>
+          <div class="progress-track" aria-hidden="true"><span data-listen-progress-bar></span></div>
+
+          <article class="listen-card">
+            <div class="listen-pulse" data-listen-pulse aria-hidden="true"><span>♪</span></div>
+            <p class="listen-phase" data-listen-phase>문제 듣는 중</p>
+            <span class="subject-chip" data-listen-subject></span>
+            <h2 data-listen-question></h2>
+            <section class="listen-mnemonic" data-listen-mnemonic-box hidden>
+              <span>니모닉</span>
+              <strong data-listen-mnemonic></strong>
+            </section>
+            <div class="countdown" data-listen-countdown hidden>
+              <strong data-listen-seconds>10</strong>
+              <span>초 동안 답을 떠올려보세요</span>
+            </div>
+          </article>
+
+          <div class="listen-controls">
+            <button type="button" data-listen-toggle>일시정지</button>
+            <button type="button" data-listen-answer>바로 답 듣기</button>
+            <button type="button" data-listen-next>다음 문제</button>
+          </div>
+          <p class="listen-note">마지막 문제 뒤에는 처음부터 다음 회차가 자동 재생됩니다.</p>
+        </section>
+
         <section class="screen finish-screen" data-screen="finish" hidden>
           <section class="finish-card">
             <div class="finish-mark" aria-hidden="true">✓</div>
@@ -175,6 +212,6 @@
     <div class="toast" data-toast hidden></div>
 
     <script src="./cards-data.js?v=1"></script>
-    <script src="./app.js?v=1"></script>
+    <script src="./app.js?v=2"></script>
   </body>
 </html>

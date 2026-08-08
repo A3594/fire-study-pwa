@@ -24,6 +24,7 @@
     dueButtonCopy: $('[data-due-button-copy]'),
     startDue: $('[data-start-due]'),
     startRandom: $('[data-start-random]'),
+    startListening: $('[data-start-listening]'),
     progress: $('[data-progress]'),
     progressBar: $('[data-progress-bar]'),
     studyKind: $('[data-study-kind]'),
@@ -39,6 +40,18 @@
     resultAgain: $('[data-result-again]'),
     resultHard: $('[data-result-hard]'),
     resultGood: $('[data-result-good]'),
+    listenProgress: $('[data-listen-progress]'),
+    listenProgressBar: $('[data-listen-progress-bar]'),
+    listenCycle: $('[data-listen-cycle]'),
+    listenSubject: $('[data-listen-subject]'),
+    listenQuestion: $('[data-listen-question]'),
+    listenMnemonic: $('[data-listen-mnemonic]'),
+    listenMnemonicBox: $('[data-listen-mnemonic-box]'),
+    listenPhase: $('[data-listen-phase]'),
+    listenPulse: $('[data-listen-pulse]'),
+    listenCountdown: $('[data-listen-countdown]'),
+    listenSeconds: $('[data-listen-seconds]'),
+    listenToggle: $('[data-listen-toggle]'),
     settingsModal: $('[data-settings-modal]'),
     sessionLimit: $('[data-session-limit]'),
     installButton: $('[data-install]'),
@@ -61,7 +74,16 @@
     repeated: new Set(),
     results: { again: 0, hard: 0, good: 0 },
     lastMode: "due",
-    installPrompt: null
+    installPrompt: null,
+    listening: {
+      active: false,
+      paused: false,
+      cards: [],
+      index: 0,
+      cycle: 1,
+      sequence: 0,
+      wakeLock: null
+    }
   };
 
   function loadJson(key, fallback) {
@@ -146,6 +168,7 @@
       : "오늘 예정된 카드가 없습니다";
     dom.startDue.disabled = cards.length === 0;
     dom.startRandom.disabled = cards.length === 0;
+    dom.startListening.disabled = cards.length === 0;
   }
 
   function shuffle(items) {
@@ -184,6 +207,240 @@
     state.results = { again: 0, hard: 0, good: 0 };
     showScreen("study");
     renderCard();
+  }
+
+  function speechSupported() {
+    return "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
+  }
+
+  function koreanVoice() {
+    const voices = window.speechSynthesis?.getVoices?.() || [];
+    const korean = voices.filter((voice) => /^ko(?:-|_)/i.test(voice.lang));
+    const preferredNames = ["sora", "sunhi", "yuna", "heami", "google 한국", "korean"];
+    return korean.sort((a, b) => {
+      const nameA = a.name.toLocaleLowerCase("ko-KR");
+      const nameB = b.name.toLocaleLowerCase("ko-KR");
+      const preferredA = preferredNames.findIndex((name) => nameA.includes(name));
+      const preferredB = preferredNames.findIndex((name) => nameB.includes(name));
+      const scoreA = (preferredA < 0 ? 50 : preferredA) + (a.localService ? 0 : 10);
+      const scoreB = (preferredB < 0 ? 50 : preferredB) + (b.localService ? 0 : 10);
+      return scoreA - scoreB;
+    })[0] || voices.find((voice) => voice.default) || null;
+  }
+
+  function speechText(value) {
+    const numberWords = { "①": "첫째,", "②": "둘째,", "③": "셋째,", "④": "넷째,", "⑤": "다섯째,", "⑥": "여섯째,", "⑦": "일곱째,", "⑧": "여덟째," };
+    return String(value || "")
+      .replace(/[①②③④⑤⑥⑦⑧]/g, (mark) => numberWords[mark])
+      .replace(/NFTC/gi, "엔 에프 티 씨 ")
+      .replace(/NFPC/gi, "엔 에프 피 씨 ")
+      .replace(/(\d+(?:\.\d+)?)\s*(?:m²|㎡|m2)/gi, "$1 제곱미터")
+      .replace(/(\d+(?:\.\d+)?)\s*(?:m³|㎥|m3)/gi, "$1 세제곱미터")
+      .replace(/(\d+(?:\.\d+)?)\s*mm\b/gi, "$1 밀리미터")
+      .replace(/(\d+(?:\.\d+)?)\s*cm\b/gi, "$1 센티미터")
+      .replace(/(\d+(?:\.\d+)?)\s*m\b/gi, "$1 미터")
+      .replace(/(\d+(?:\.\d+)?)\s*kg\b/gi, "$1 킬로그램")
+      .replace(/(\d+(?:\.\d+)?)\s*kPa\b/gi, "$1 킬로파스칼")
+      .replace(/(\d+(?:\.\d+)?)\s*MPa\b/gi, "$1 메가파스칼")
+      .replace(/[\/·|]/g, ", ")
+      .replace(/[“”"']/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function listenSequenceValid(sequence) {
+    return state.listening.active && state.listening.sequence === sequence;
+  }
+
+  function renderListenPhase() {
+    if (state.listening.paused) {
+      dom.listenPhase.textContent = "일시정지됨";
+      dom.listenPulse.className = "listen-pulse is-paused";
+      dom.listenToggle.textContent = "계속 듣기";
+      return;
+    }
+    dom.listenPhase.textContent = state.listening.phaseText || "문제 듣는 중";
+    dom.listenPulse.className = `listen-pulse ${state.listening.phaseMode === "waiting" ? "is-waiting" : "is-speaking"}`;
+    dom.listenToggle.textContent = "일시정지";
+  }
+
+  function setListenPhase(text, mode = "speaking") {
+    state.listening.phaseText = text;
+    state.listening.phaseMode = mode;
+    renderListenPhase();
+  }
+
+  function speakText(text, rate, sequence) {
+    return new Promise((resolve) => {
+      if (!listenSequenceValid(sequence)) {
+        resolve(false);
+        return;
+      }
+      const utterance = new SpeechSynthesisUtterance(speechText(text));
+      const voice = koreanVoice();
+      utterance.lang = voice?.lang || "ko-KR";
+      if (voice) utterance.voice = voice;
+      utterance.rate = rate;
+      utterance.pitch = 1;
+      utterance.volume = 1;
+      utterance.onend = () => resolve(listenSequenceValid(sequence));
+      utterance.onerror = () => resolve(false);
+      window.speechSynthesis.speak(utterance);
+    });
+  }
+
+  function listenDelay(milliseconds, sequence) {
+    return new Promise((resolve) => {
+      let remaining = milliseconds;
+      let previous = performance.now();
+      const tick = () => {
+        if (!listenSequenceValid(sequence)) {
+          resolve(false);
+          return;
+        }
+        const now = performance.now();
+        if (!state.listening.paused) remaining -= now - previous;
+        previous = now;
+        if (remaining <= 0) {
+          resolve(true);
+          return;
+        }
+        setTimeout(tick, Math.min(120, remaining));
+      };
+      setTimeout(tick, Math.min(120, remaining));
+    });
+  }
+
+  function renderListenCard() {
+    const card = state.listening.cards[state.listening.index];
+    if (!card) return;
+    const total = state.listening.cards.length;
+    dom.listenProgress.textContent = `${state.listening.index + 1} / ${total}`;
+    dom.listenProgressBar.style.width = `${((state.listening.index + 1) / total) * 100}%`;
+    dom.listenCycle.textContent = `${state.listening.cycle}회차 · ${card.kind}`;
+    dom.listenSubject.textContent = card.subject;
+    dom.listenQuestion.textContent = card.question;
+    dom.listenMnemonic.textContent = card.mnemonic;
+    dom.listenMnemonicBox.hidden = true;
+    dom.listenCountdown.hidden = true;
+  }
+
+  async function playListenAnswer(sequence) {
+    if (!listenSequenceValid(sequence)) return;
+    const card = state.listening.cards[state.listening.index];
+    dom.listenCountdown.hidden = true;
+    dom.listenMnemonicBox.hidden = false;
+    setListenPhase("니모닉 1번째 듣는 중");
+    if (!(await speakText(`니모닉. ${card.mnemonic}`, 0.88, sequence))) return;
+    if (!(await listenDelay(650, sequence))) return;
+    setListenPhase("니모닉 2번째 듣는 중");
+    if (!(await speakText(card.mnemonic, 0.85, sequence))) return;
+    if (!(await listenDelay(900, sequence))) return;
+    advanceListening();
+  }
+
+  async function playListenQuestion(sequence) {
+    if (!listenSequenceValid(sequence)) return;
+    const card = state.listening.cards[state.listening.index];
+    renderListenCard();
+    setListenPhase("문제 듣는 중");
+    if (!(await speakText(card.question, 0.94, sequence))) return;
+    dom.listenCountdown.hidden = false;
+    setListenPhase("답을 떠올리는 시간", "waiting");
+    for (let seconds = 10; seconds > 0; seconds -= 1) {
+      dom.listenSeconds.textContent = seconds;
+      if (!(await listenDelay(1000, sequence))) return;
+    }
+    await playListenAnswer(sequence);
+  }
+
+  function advanceListening() {
+    if (!state.listening.active) return;
+    state.listening.index += 1;
+    if (state.listening.index >= state.listening.cards.length) {
+      state.listening.index = 0;
+      state.listening.cycle += 1;
+    }
+    state.listening.sequence += 1;
+    playListenQuestion(state.listening.sequence);
+  }
+
+  async function requestWakeLock() {
+    if (!("wakeLock" in navigator) || document.visibilityState !== "visible") return;
+    try {
+      state.listening.wakeLock = await navigator.wakeLock.request("screen");
+    } catch {
+      state.listening.wakeLock = null;
+    }
+  }
+
+  function startListening() {
+    if (!speechSupported()) {
+      showToast("이 브라우저에서는 음성 듣기를 지원하지 않습니다.");
+      return;
+    }
+    const cards = filteredCards().filter((card) => card.hasMnemonic);
+    if (!cards.length) {
+      showToast("선택한 범위에 니모닉 카드가 없습니다.");
+      return;
+    }
+    stopListening(false);
+    state.listening.active = true;
+    state.listening.paused = false;
+    state.listening.cards = cards;
+    state.listening.index = 0;
+    state.listening.cycle = 1;
+    state.listening.sequence += 1;
+    showScreen("listening");
+    requestWakeLock();
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.resume();
+    playListenQuestion(state.listening.sequence);
+  }
+
+  function stopListening(showHome = true) {
+    state.listening.active = false;
+    state.listening.paused = false;
+    state.listening.sequence += 1;
+    if (speechSupported()) window.speechSynthesis.cancel();
+    state.listening.wakeLock?.release?.().catch(() => {});
+    state.listening.wakeLock = null;
+    if (showHome) {
+      showScreen("home");
+      updateDashboard();
+    }
+  }
+
+  function toggleListening() {
+    if (!state.listening.active) return;
+    state.listening.paused = !state.listening.paused;
+    if (state.listening.paused) window.speechSynthesis.pause();
+    else window.speechSynthesis.resume();
+    renderListenPhase();
+  }
+
+  function listenAnswerNow() {
+    if (!state.listening.active) return;
+    state.listening.paused = false;
+    state.listening.sequence += 1;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.resume();
+    renderListenPhase();
+    playListenAnswer(state.listening.sequence);
+  }
+
+  function listenNext() {
+    if (!state.listening.active) return;
+    state.listening.paused = false;
+    state.listening.sequence += 1;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.resume();
+    state.listening.index += 1;
+    if (state.listening.index >= state.listening.cards.length) {
+      state.listening.index = 0;
+      state.listening.cycle += 1;
+    }
+    playListenQuestion(state.listening.sequence);
   }
 
   function currentCard() {
@@ -263,6 +520,7 @@
   }
 
   function goHome() {
+    if (state.listening.active) stopListening(false);
     showScreen("home");
     updateDashboard();
   }
@@ -322,6 +580,11 @@
     });
     dom.startDue.addEventListener("click", () => startSession("due"));
     dom.startRandom.addEventListener("click", () => startSession("random"));
+    dom.startListening.addEventListener("click", startListening);
+    $('[data-stop-listening]').addEventListener("click", () => stopListening(true));
+    dom.listenToggle.addEventListener("click", toggleListening);
+    $('[data-listen-answer]').addEventListener("click", listenAnswerNow);
+    $('[data-listen-next]').addEventListener("click", listenNext);
     dom.reveal.addEventListener("click", revealMnemonic);
     $$('[data-rating]').forEach((button) => button.addEventListener("click", () => rateCard(button.dataset.rating)));
     $$('[data-go-home]').forEach((button) => button.addEventListener("click", goHome));
@@ -345,6 +608,12 @@
     });
     window.addEventListener("online", setOnlineState);
     window.addEventListener("offline", setOnlineState);
+    document.addEventListener("visibilitychange", () => {
+      if (state.listening.active && document.visibilityState === "visible" && !state.listening.wakeLock) requestWakeLock();
+    });
+    window.addEventListener("beforeunload", () => {
+      if (speechSupported()) window.speechSynthesis.cancel();
+    });
     window.addEventListener("keydown", (event) => {
       if (dom.settingsModal && !dom.settingsModal.hidden) {
         if (event.key === "Escape") closeSettings();
