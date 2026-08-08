@@ -7,11 +7,12 @@
   const SETTINGS_KEY = "fire-study-settings-v1";
   const RELEASE_KEY = "fire-study-release-seen";
   const LISTENING_KEY = "fire-study-listening-position-v1";
+  const STUDY_SESSION_KEY = "fire-study-active-session-v1";
   const APP_RELEASE = {
-    id: "2026-08-08-listening-v3",
+    id: "2026-08-08-study-save-v1",
     date: "2026-08-08",
     label: "2026.08.08",
-    note: "반복 듣기 위치 자동저장 추가"
+    note: "카드 학습 진도·세션 자동저장 개선"
   };
   const DAY = 24 * 60 * 60 * 1000;
   const MINUTE = 60 * 1000;
@@ -35,6 +36,8 @@
     dueButtonCopy: $('[data-due-button-copy]'),
     startDue: $('[data-start-due]'),
     startRandom: $('[data-start-random]'),
+    resumeStudy: $('[data-resume-study]'),
+    resumeStudyCopy: $('[data-resume-study-copy]'),
     startListening: $('[data-start-listening]'),
     resumeListening: $('[data-resume-listening]'),
     resumeListeningCopy: $('[data-resume-listening-copy]'),
@@ -81,6 +84,7 @@
     progress: loadJson(PROGRESS_KEY, {}),
     settings: { sessionLimit: 20, ...loadJson(SETTINGS_KEY, {}) },
     savedListening: loadJson(LISTENING_KEY, null),
+    savedStudy: loadJson(STUDY_SESSION_KEY, null),
     session: [],
     sessionOriginal: [],
     cursor: 0,
@@ -88,6 +92,7 @@
     repeated: new Set(),
     results: { again: 0, hard: 0, good: 0 },
     lastMode: "due",
+    studyActive: false,
     installPrompt: null,
     listening: {
       active: false,
@@ -110,7 +115,11 @@
   }
 
   function saveProgress() {
-    localStorage.setItem(PROGRESS_KEY, JSON.stringify(state.progress));
+    try {
+      localStorage.setItem(PROGRESS_KEY, JSON.stringify(state.progress));
+    } catch {
+      showToast("학습 진도를 저장하지 못했습니다. 브라우저 저장 공간을 확인해주세요.");
+    }
   }
 
   function saveSettings() {
@@ -180,7 +189,7 @@
     dom.dueButtonCopy.textContent = todayCount
       ? `복습 ${due}개 · 새 카드 ${Math.max(0, todayCount - Math.min(due, limit))}개`
       : "오늘 예정된 카드가 없습니다";
-    dom.startDue.disabled = cards.length === 0;
+    dom.startDue.disabled = cards.length === 0 || todayCount === 0;
     dom.startRandom.disabled = cards.length === 0;
     dom.startListening.disabled = cards.length === 0;
   }
@@ -194,6 +203,74 @@
     return copy;
   }
 
+  function updateResumeStudy() {
+    const saved = state.savedStudy;
+    if (!saved || !Array.isArray(saved.sessionIds) || saved.cursor >= saved.sessionIds.length) {
+      dom.resumeStudy.hidden = true;
+      return;
+    }
+    const available = new Set(CARDS.map((card) => card.id));
+    if (!saved.sessionIds.some((id) => available.has(id))) {
+      dom.resumeStudy.hidden = true;
+      return;
+    }
+    const total = Math.max(1, Number(saved.originalTotal || saved.sessionIds.length));
+    const position = Math.min(Number(saved.completed || 0) + 1, total);
+    const subject = saved.subject === "전체" ? saved.source : saved.subject;
+    dom.resumeStudyCopy.textContent = `${subject} · ${position} / ${total}`;
+    dom.resumeStudy.hidden = false;
+  }
+
+  function clearStudySession() {
+    state.savedStudy = null;
+    try {
+      localStorage.removeItem(STUDY_SESSION_KEY);
+    } catch {
+      // 저장 공간이 막혀 있어도 현재 학습은 계속합니다.
+    }
+    dom.resumeStudy.hidden = true;
+  }
+
+  function saveStudySession() {
+    if (!state.studyActive || !state.session.length || state.cursor >= state.session.length) return;
+    const saved = {
+      source: state.source,
+      subject: state.subject,
+      search: state.search,
+      mnemonicOnly: state.mnemonicOnly,
+      mode: state.lastMode,
+      sessionIds: state.session.map((card) => card.id),
+      originalIds: state.sessionOriginal.map((card) => card.id),
+      originalTotal: state.sessionOriginal.length,
+      cursor: state.cursor,
+      completed: state.completed,
+      repeatedIds: [...state.repeated],
+      results: state.results,
+      updatedAt: Date.now()
+    };
+    state.savedStudy = saved;
+    try {
+      localStorage.setItem(STUDY_SESSION_KEY, JSON.stringify(saved));
+    } catch {
+      // 저장 공간이 막혀 있어도 현재 학습은 계속합니다.
+    }
+    updateResumeStudy();
+  }
+
+  function beginStudySession(selected, mode, restored = null) {
+    state.lastMode = mode;
+    state.session = selected;
+    state.sessionOriginal = restored?.original || [...selected];
+    state.cursor = Number(restored?.cursor || 0);
+    state.completed = Number(restored?.completed || 0);
+    state.repeated = new Set(restored?.repeatedIds || []);
+    state.results = restored?.results || { again: 0, hard: 0, good: 0 };
+    state.studyActive = true;
+    showScreen("study");
+    saveStudySession();
+    renderCard();
+  }
+
   function startSession(mode) {
     const cards = filteredCards();
     if (!cards.length) {
@@ -205,22 +282,55 @@
     if (mode === "random") {
       selected = shuffle(cards).slice(0, limit);
     } else {
-      const due = shuffle(cards.filter((card) => isDue(card))).sort(
-        (a, b) => Number(getRecord(a).dueAt) - Number(getRecord(b).dueAt)
+      const due = cards.filter((card) => isDue(card)).sort(
+        (a, b) => Number(getRecord(a).dueAt) - Number(getRecord(b).dueAt) || Number(a.order) - Number(b.order)
       );
-      const fresh = shuffle(cards.filter((card) => getRecord(card).reps === 0));
+      const fresh = cards.filter((card) => getRecord(card).reps === 0).sort((a, b) => Number(a.order) - Number(b.order));
       selected = [...due, ...fresh].slice(0, limit);
-      if (!selected.length) selected = shuffle(cards).slice(0, Math.min(limit, cards.length));
+      if (!selected.length) {
+        showToast("오늘 예정된 복습이나 새 카드가 없습니다. 필요하면 무작위 연습을 이용하세요.");
+        return;
+      }
     }
-    state.lastMode = mode;
-    state.session = selected;
-    state.sessionOriginal = [...selected];
-    state.cursor = 0;
-    state.completed = 0;
-    state.repeated = new Set();
-    state.results = { again: 0, hard: 0, good: 0 };
-    showScreen("study");
-    renderCard();
+    beginStudySession(selected, mode);
+  }
+
+  function resumeSavedStudy() {
+    const saved = state.savedStudy;
+    if (!saved || !Array.isArray(saved.sessionIds)) {
+      updateResumeStudy();
+      showToast("이어 할 학습을 찾지 못했습니다.");
+      return;
+    }
+    const byId = new Map(CARDS.map((card) => [card.id, card]));
+    const session = saved.sessionIds.map((id) => byId.get(id)).filter(Boolean);
+    const original = (saved.originalIds || saved.sessionIds).map((id) => byId.get(id)).filter(Boolean);
+    if (!session.length || Number(saved.cursor || 0) >= session.length) {
+      clearStudySession();
+      showToast("저장된 학습은 이미 완료됐습니다.");
+      return;
+    }
+    state.source = saved.source || "화재안전기술기준";
+    state.subject = "전체";
+    dom.sourceTabs.forEach((tab) => tab.classList.toggle("is-selected", tab.dataset.source === state.source));
+    updateSubjects();
+    if ([...dom.subject.options].some((option) => option.value === saved.subject)) {
+      state.subject = saved.subject;
+      dom.subject.value = saved.subject;
+    }
+    state.search = saved.search || "";
+    dom.search.value = state.search;
+    state.mnemonicOnly = saved.mnemonicOnly !== false;
+    dom.mnemonicOnly.checked = state.mnemonicOnly;
+    updateDashboard();
+    beginStudySession(session, saved.mode || "due", {
+      original,
+      cursor: saved.cursor,
+      completed: saved.completed,
+      repeatedIds: saved.repeatedIds,
+      results: saved.results
+    });
+    showToast(`${Number(saved.completed || 0) + 1}번째 카드부터 이어서 학습합니다.`);
   }
 
   function speechSupported() {
@@ -554,6 +664,7 @@
       finishSession();
       return;
     }
+    saveStudySession();
     const total = Math.max(state.sessionOriginal.length, state.completed + 1);
     const shown = Math.min(state.completed + 1, total);
     dom.progress.textContent = `${shown} / ${total}`;
@@ -611,6 +722,8 @@
   }
 
   function finishSession() {
+    state.studyActive = false;
+    clearStudySession();
     dom.resultAgain.textContent = state.results.again;
     dom.resultHard.textContent = state.results.hard;
     dom.resultGood.textContent = state.results.good;
@@ -621,6 +734,10 @@
   }
 
   function goHome() {
+    if (state.studyActive) {
+      saveStudySession();
+      state.studyActive = false;
+    }
     if (state.listening.active) stopListening(false);
     showScreen("home");
     updateDashboard();
@@ -697,6 +814,7 @@
     });
     dom.startDue.addEventListener("click", () => startSession("due"));
     dom.startRandom.addEventListener("click", () => startSession("random"));
+    dom.resumeStudy.addEventListener("click", resumeSavedStudy);
     dom.startListening.addEventListener("click", startListening);
     dom.resumeListening.addEventListener("click", resumeSavedListening);
     $('[data-stop-listening]').addEventListener("click", () => stopListening(true));
@@ -727,10 +845,14 @@
     window.addEventListener("online", setOnlineState);
     window.addEventListener("offline", setOnlineState);
     document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "hidden") saveListeningPosition();
+      if (document.visibilityState === "hidden") {
+        saveStudySession();
+        saveListeningPosition();
+      }
       if (state.listening.active && document.visibilityState === "visible" && !state.listening.wakeLock) requestWakeLock();
     });
     window.addEventListener("beforeunload", () => {
+      saveStudySession();
       saveListeningPosition();
       if (speechSupported()) window.speechSynthesis.cancel();
     });
@@ -779,6 +901,7 @@
     setOnlineState();
     showReleaseStatus();
     setDataVersion();
+    updateResumeStudy();
     updateResumeListening();
     dom.sessionLimit.value = String(state.settings.sessionLimit);
     registerServiceWorker();
