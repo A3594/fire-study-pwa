@@ -9,10 +9,10 @@
   const LISTENING_KEY = "fire-study-listening-position-v1";
   const STUDY_SESSION_KEY = "fire-study-active-session-v1";
   const APP_RELEASE = {
-    id: "2026-08-08-study-save-v1",
+    id: "2026-08-08-curriculum-order-v1",
     date: "2026-08-08",
     label: "2026.08.08",
-    note: "카드 학습 진도·세션 자동저장 개선"
+    note: "과목을 NFTC·점검표 번호 순서로 정렬"
   };
   const DAY = 24 * 60 * 60 * 1000;
   const MINUTE = 60 * 1000;
@@ -139,6 +139,38 @@
     return String(value || "").toLocaleLowerCase("ko-KR").replace(/\s+/g, " ").trim();
   }
 
+  function subjectOrder(subject, kind) {
+    if (kind === "점검표") {
+      const number = Number(String(subject).match(/^\s*(\d+)/)?.[1]);
+      return Number.isFinite(number) ? number : 9999;
+    }
+    const manual = [
+      [/할로겐화합물 및 불활성기체/, 107],
+      [/무선통신보조설비/, 505],
+      [/내진설계/, 601]
+    ];
+    const manualMatch = manual.find(([pattern]) => pattern.test(subject));
+    if (manualMatch) return manualMatch[1];
+    const match = String(subject).match(/NFTC\s*(\d+)([A-Z])?/i);
+    if (!match) return 9999;
+    const suffix = match[2] ? (match[2].toUpperCase().charCodeAt(0) - 64) / 10 : 0;
+    return Number(match[1]) + suffix;
+  }
+
+  function compareSubjects(a, b, kind) {
+    return subjectOrder(a, kind) - subjectOrder(b, kind) || a.localeCompare(b, "ko");
+  }
+
+  function compareCards(a, b) {
+    const kindOrder = (a.kind === "화재안전기술기준" ? 0 : 1) - (b.kind === "화재안전기술기준" ? 0 : 1);
+    if (kindOrder) return kindOrder;
+    const subjectDifference = subjectOrder(a.subject, a.kind) - subjectOrder(b.subject, b.kind);
+    if (subjectDifference) return subjectDifference;
+    const subjectName = a.subject.localeCompare(b.subject, "ko");
+    if (subjectName) return subjectName;
+    return Number(a.line || a.order) - Number(b.line || b.order);
+  }
+
   function filteredCards() {
     const search = normalize(state.search);
     return CARDS.filter((card) => {
@@ -147,7 +179,7 @@
       if (state.mnemonicOnly && !card.hasMnemonic) return false;
       if (!search) return true;
       return normalize(`${card.question} ${card.mnemonic} ${card.subject}`).includes(search);
-    });
+    }).sort(compareCards);
   }
 
   function getRecord(card) {
@@ -165,7 +197,13 @@
       map.set(card.subject, (map.get(card.subject) || 0) + 1);
       return map;
     }, new Map());
-    const subjects = [...counts.keys()].sort((a, b) => a.localeCompare(b, "ko"));
+    const subjects = [...counts.keys()].sort((a, b) => {
+      if (state.source !== "전체") return compareSubjects(a, b, state.source);
+      const kindA = cardsForSource.find((card) => card.subject === a)?.kind || "점검표";
+      const kindB = cardsForSource.find((card) => card.subject === b)?.kind || "점검표";
+      const kindOrder = (kindA === "화재안전기술기준" ? 0 : 1) - (kindB === "화재안전기술기준" ? 0 : 1);
+      return kindOrder || compareSubjects(a, b, kindA);
+    });
     const previous = subjects.includes(state.subject) ? state.subject : "전체";
     dom.subject.innerHTML = "";
     dom.subject.append(new Option(`전체 과목 (${cardsForSource.length})`, "전체"));
@@ -283,9 +321,9 @@
       selected = shuffle(cards).slice(0, limit);
     } else {
       const due = cards.filter((card) => isDue(card)).sort(
-        (a, b) => Number(getRecord(a).dueAt) - Number(getRecord(b).dueAt) || Number(a.order) - Number(b.order)
+        (a, b) => Number(getRecord(a).dueAt) - Number(getRecord(b).dueAt) || compareCards(a, b)
       );
-      const fresh = cards.filter((card) => getRecord(card).reps === 0).sort((a, b) => Number(a.order) - Number(b.order));
+      const fresh = cards.filter((card) => getRecord(card).reps === 0).sort(compareCards);
       selected = [...due, ...fresh].slice(0, limit);
       if (!selected.length) {
         showToast("오늘 예정된 복습이나 새 카드가 없습니다. 필요하면 무작위 연습을 이용하세요.");
