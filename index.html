@@ -9,7 +9,7 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./icon-192.png" />
-    <link rel="stylesheet" href="./styles.css?v=3" />
+    <link rel="stylesheet" href="./styles.css?v=4" />
   </head>
   <body>
     <div class="app-shell">
@@ -93,6 +93,10 @@
             <button class="listen-start-button" type="button" data-start-listening>
               <span class="listen-start-icon" aria-hidden="true">▶</span>
               <span><b>선택 과목 반복 듣기</b><small>문제 낭독 → 10초 회상 → 니모닉 2회</small></span>
+            </button>
+            <button class="resume-listen-button" type="button" data-resume-listening hidden>
+              <span aria-hidden="true">↻</span>
+              <span><b>저장된 위치에서 이어 듣기</b><small data-resume-listening-copy></small></span>
             </button>
           </section>
 
@@ -219,6 +223,6 @@
     <div class="toast" data-toast hidden></div>
 
     <script src="./cards-data.js?v=1"></script>
-    <script src="./app.js?v=4"></script>
+    <script src="./app.js?v=5"></script>
   </body>
 </html>

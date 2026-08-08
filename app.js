@@ -6,11 +6,12 @@
   const PROGRESS_KEY = "fire-study-progress-v1";
   const SETTINGS_KEY = "fire-study-settings-v1";
   const RELEASE_KEY = "fire-study-release-seen";
+  const LISTENING_KEY = "fire-study-listening-position-v1";
   const APP_RELEASE = {
-    id: "2026-08-08-listening-v2",
+    id: "2026-08-08-listening-v3",
     date: "2026-08-08",
     label: "2026.08.08",
-    note: "반복 듣기 음성 안내 개선"
+    note: "반복 듣기 위치 자동저장 추가"
   };
   const DAY = 24 * 60 * 60 * 1000;
   const MINUTE = 60 * 1000;
@@ -35,6 +36,8 @@
     startDue: $('[data-start-due]'),
     startRandom: $('[data-start-random]'),
     startListening: $('[data-start-listening]'),
+    resumeListening: $('[data-resume-listening]'),
+    resumeListeningCopy: $('[data-resume-listening-copy]'),
     progress: $('[data-progress]'),
     progressBar: $('[data-progress-bar]'),
     studyKind: $('[data-study-kind]'),
@@ -77,6 +80,7 @@
     mnemonicOnly: true,
     progress: loadJson(PROGRESS_KEY, {}),
     settings: { sessionLimit: 20, ...loadJson(SETTINGS_KEY, {}) },
+    savedListening: loadJson(LISTENING_KEY, null),
     session: [],
     sessionOriginal: [],
     cursor: 0,
@@ -352,6 +356,7 @@
   async function playListenQuestion(sequence) {
     if (!listenSequenceValid(sequence)) return;
     const card = state.listening.cards[state.listening.index];
+    saveListeningPosition();
     renderListenCard();
     setListenPhase("문제 듣는 중");
     if (!(await speakText(card.question, 0.94, sequence))) return;
@@ -384,6 +389,70 @@
     }
   }
 
+  function cardsFromSavedListening(saved) {
+    if (!saved) return [];
+    const search = normalize(saved.search);
+    return CARDS.filter((card) => {
+      if (!card.hasMnemonic) return false;
+      if (saved.source !== "전체" && card.kind !== saved.source) return false;
+      if (saved.subject !== "전체" && card.subject !== saved.subject) return false;
+      if (!search) return true;
+      return normalize(`${card.question} ${card.mnemonic} ${card.subject}`).includes(search);
+    });
+  }
+
+  function updateResumeListening() {
+    const saved = state.savedListening;
+    const cards = cardsFromSavedListening(saved);
+    if (!saved || !cards.length) {
+      dom.resumeListening.hidden = true;
+      return;
+    }
+    const savedIndex = cards.findIndex((card) => card.id === saved.cardId);
+    const index = savedIndex >= 0 ? savedIndex : Math.min(Number(saved.index || 0), cards.length - 1);
+    const subject = saved.subject === "전체" ? saved.source : saved.subject;
+    dom.resumeListeningCopy.textContent = `${subject} · ${index + 1} / ${cards.length} · ${Number(saved.cycle || 1)}회차`;
+    dom.resumeListening.hidden = false;
+  }
+
+  function saveListeningPosition() {
+    if (!state.listening.active || !state.listening.cards.length) return;
+    const card = state.listening.cards[state.listening.index];
+    const saved = {
+      source: state.source,
+      subject: state.subject,
+      search: state.search,
+      cardId: card?.id || null,
+      index: state.listening.index,
+      cycle: state.listening.cycle,
+      total: state.listening.cards.length,
+      updatedAt: Date.now()
+    };
+    state.savedListening = saved;
+    try {
+      localStorage.setItem(LISTENING_KEY, JSON.stringify(saved));
+    } catch {
+      // 저장 공간이 막힌 브라우저에서는 현재 재생만 유지합니다.
+    }
+    updateResumeListening();
+  }
+
+  function beginListening(cards, index = 0, cycle = 1) {
+    stopListening(false);
+    state.listening.active = true;
+    state.listening.paused = false;
+    state.listening.cards = cards;
+    state.listening.index = Math.max(0, Math.min(index, cards.length - 1));
+    state.listening.cycle = Math.max(1, Number(cycle || 1));
+    state.listening.sequence += 1;
+    showScreen("listening");
+    requestWakeLock();
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.resume();
+    saveListeningPosition();
+    playListenQuestion(state.listening.sequence);
+  }
+
   function startListening() {
     if (!speechSupported()) {
       showToast("이 브라우저에서는 음성 듣기를 지원하지 않습니다.");
@@ -394,27 +463,49 @@
       showToast("선택한 범위에 니모닉 카드가 없습니다.");
       return;
     }
-    stopListening(false);
-    state.listening.active = true;
-    state.listening.paused = false;
-    state.listening.cards = cards;
-    state.listening.index = 0;
-    state.listening.cycle = 1;
-    state.listening.sequence += 1;
-    showScreen("listening");
-    requestWakeLock();
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.resume();
-    playListenQuestion(state.listening.sequence);
+    beginListening(cards, 0, 1);
+  }
+
+  function resumeSavedListening() {
+    if (!speechSupported()) {
+      showToast("이 브라우저에서는 음성 듣기를 지원하지 않습니다.");
+      return;
+    }
+    const saved = state.savedListening;
+    const cards = cardsFromSavedListening(saved);
+    if (!saved || !cards.length) {
+      dom.resumeListening.hidden = true;
+      showToast("이어 들을 저장 위치를 찾지 못했습니다.");
+      return;
+    }
+    state.source = saved.source;
+    state.subject = "전체";
+    dom.sourceTabs.forEach((tab) => tab.classList.toggle("is-selected", tab.dataset.source === state.source));
+    updateSubjects();
+    if ([...dom.subject.options].some((option) => option.value === saved.subject)) {
+      state.subject = saved.subject;
+      dom.subject.value = saved.subject;
+    }
+    state.search = saved.search || "";
+    dom.search.value = state.search;
+    state.mnemonicOnly = true;
+    dom.mnemonicOnly.checked = true;
+    updateDashboard();
+    const found = cards.findIndex((card) => card.id === saved.cardId);
+    const index = found >= 0 ? found : Math.min(Number(saved.index || 0), cards.length - 1);
+    beginListening(cards, index, saved.cycle);
+    showToast(`${index + 1}번째 문제부터 이어 듣습니다.`);
   }
 
   function stopListening(showHome = true) {
+    saveListeningPosition();
     state.listening.active = false;
     state.listening.paused = false;
     state.listening.sequence += 1;
     if (speechSupported()) window.speechSynthesis.cancel();
     state.listening.wakeLock?.release?.().catch(() => {});
     state.listening.wakeLock = null;
+    updateResumeListening();
     if (showHome) {
       showScreen("home");
       updateDashboard();
@@ -607,6 +698,7 @@
     dom.startDue.addEventListener("click", () => startSession("due"));
     dom.startRandom.addEventListener("click", () => startSession("random"));
     dom.startListening.addEventListener("click", startListening);
+    dom.resumeListening.addEventListener("click", resumeSavedListening);
     $('[data-stop-listening]').addEventListener("click", () => stopListening(true));
     dom.listenToggle.addEventListener("click", toggleListening);
     $('[data-listen-answer]').addEventListener("click", listenAnswerNow);
@@ -635,9 +727,11 @@
     window.addEventListener("online", setOnlineState);
     window.addEventListener("offline", setOnlineState);
     document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") saveListeningPosition();
       if (state.listening.active && document.visibilityState === "visible" && !state.listening.wakeLock) requestWakeLock();
     });
     window.addEventListener("beforeunload", () => {
+      saveListeningPosition();
       if (speechSupported()) window.speechSynthesis.cancel();
     });
     window.addEventListener("keydown", (event) => {
@@ -685,6 +779,7 @@
     setOnlineState();
     showReleaseStatus();
     setDataVersion();
+    updateResumeListening();
     dom.sessionLimit.value = String(state.settings.sessionLimit);
     registerServiceWorker();
   }
