@@ -9,7 +9,7 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./icon-192.png" />
-    <link rel="stylesheet" href="./styles.css?v=2" />
+    <link rel="stylesheet" href="./styles.css?v=3" />
   </head>
   <body>
     <div class="app-shell">
@@ -29,6 +29,13 @@
 
       <main>
         <section class="screen home-screen is-active" data-screen="home">
+          <section class="update-notice" aria-live="polite">
+            <span class="update-dot" aria-hidden="true"></span>
+            <span>
+              <strong data-update-status>업데이트됨</strong>
+              <small><time data-update-date></time><span aria-hidden="true"> · </span><span data-update-note></span></small>
+            </span>
+          </section>
           <section class="hero-panel">
             <p class="eyebrow">LOGSEQ → MOBILE STUDY</p>
             <h1>길게 쓰기 전에<br /><em>니모닉부터 정확하게</em></h1>
@@ -212,6 +219,6 @@
     <div class="toast" data-toast hidden></div>
 
     <script src="./cards-data.js?v=1"></script>
-    <script src="./app.js?v=2"></script>
+    <script src="./app.js?v=3"></script>
   </body>
 </html>

@@ -5,6 +5,13 @@
   const CARDS = Array.isArray(DATA.cards) ? DATA.cards : [];
   const PROGRESS_KEY = "fire-study-progress-v1";
   const SETTINGS_KEY = "fire-study-settings-v1";
+  const RELEASE_KEY = "fire-study-release-seen";
+  const APP_RELEASE = {
+    id: "2026-08-08-listening-v1",
+    date: "2026-08-08",
+    label: "2026.08.08",
+    note: "과목별 반복 듣기 기능 추가"
+  };
   const DAY = 24 * 60 * 60 * 1000;
   const MINUTE = 60 * 1000;
 
@@ -21,6 +28,9 @@
     dueCount: $('[data-due-count]'),
     newCount: $('[data-new-count]'),
     learnedCount: $('[data-learned-count]'),
+    updateStatus: $('[data-update-status]'),
+    updateDate: $('[data-update-date]'),
+    updateNote: $('[data-update-note]'),
     dueButtonCopy: $('[data-due-button-copy]'),
     startDue: $('[data-start-due]'),
     startRandom: $('[data-start-random]'),
@@ -550,6 +560,22 @@
     dom.offlineState.textContent = navigator.onLine ? "온라인 · 오프라인 학습 준비됨" : "오프라인 · 저장된 카드로 학습 중";
   }
 
+  function showReleaseStatus() {
+    let previous = null;
+    try {
+      previous = localStorage.getItem(RELEASE_KEY);
+      localStorage.setItem(RELEASE_KEY, APP_RELEASE.id);
+    } catch {
+      previous = APP_RELEASE.id;
+    }
+    const updated = previous !== APP_RELEASE.id;
+    dom.updateStatus.textContent = updated ? "업데이트됨" : "최신 업데이트";
+    dom.updateDate.dateTime = APP_RELEASE.date;
+    dom.updateDate.textContent = APP_RELEASE.label;
+    dom.updateNote.textContent = APP_RELEASE.note;
+    if (updated) setTimeout(() => showToast(`업데이트되었습니다 · ${APP_RELEASE.label}`), 500);
+  }
+
   function setDataVersion() {
     const date = DATA.metadata?.generatedAt ? new Date(DATA.metadata.generatedAt) : null;
     dom.dataVersion.textContent = date && !Number.isNaN(date.valueOf())
@@ -657,6 +683,7 @@
     updateSubjects();
     updateDashboard();
     setOnlineState();
+    showReleaseStatus();
     setDataVersion();
     dom.sessionLimit.value = String(state.settings.sessionLimit);
     registerServiceWorker();
