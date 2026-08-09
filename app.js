@@ -11,10 +11,10 @@
   const STUDY_SESSION_KEY = "fire-study-active-session-v1";
   const STORY_KEY = "fire-study-story-position-v1";
   const APP_RELEASE = {
-    id: "2026-08-10-voice-sample-scene-1-v5",
+    id: "2026-08-10-episode-2-full-voice-v1",
     date: "2026-08-10",
     label: "2026.08.10",
-    note: "1장 해설자·수지 음성을 marin으로 통일하고 수지는 즐거운 억양으로 재제작"
+    note: "2화 옥내소화전 전체 3인 음성 및 배경음 추가"
   };
   const DAY = 24 * 60 * 60 * 1000;
   const MINUTE = 60 * 1000;
@@ -43,7 +43,7 @@
     startListening: $('[data-start-listening]'),
     resumeListening: $('[data-resume-listening]'),
     resumeListeningCopy: $('[data-resume-listening-copy]'),
-    startStory: $('[data-start-story]'),
+    startStoryButtons: $$('[data-start-story]'),
     startVoiceSample: $('[data-start-voice-sample]'),
     voiceSample: $('[data-voice-sample]'),
     voiceSampleAudio: $('[data-voice-sample-audio]'),
@@ -84,7 +84,6 @@
     storyTitle: $('[data-story-title]'),
     storySceneTitle: $('[data-story-scene-title]'),
     storyText: $('[data-story-text]'),
-    storyMnemonics: $('[data-story-mnemonics]'),
     storyToggle: $('[data-story-toggle]'),
     storyPrev: $('[data-story-prev]'),
     storyNext: $('[data-story-next]'),
@@ -130,6 +129,8 @@
       episode: null,
       sceneIndex: 0,
       sequence: 0,
+      audio: null,
+      audioResolve: null,
       wakeLock: null
     }
   };
@@ -768,6 +769,55 @@
     });
   }
 
+  function stopRecordedStoryAudio(reset = true) {
+    const audio = state.story.audio;
+    if (audio) {
+      audio.onended = null;
+      audio.onerror = null;
+      audio.pause();
+      if (reset) {
+        try {
+          audio.currentTime = 0;
+        } catch {
+          // 아직 메타데이터를 읽지 못한 경우에도 다음 장면 전환은 계속합니다.
+        }
+      }
+    }
+    state.story.audio = null;
+    const resolve = state.story.audioResolve;
+    state.story.audioResolve = null;
+    resolve?.(false);
+  }
+
+  function playRecordedStoryAudio(source, sequence) {
+    return new Promise((resolve) => {
+      if (!storySequenceValid(sequence)) {
+        resolve(false);
+        return;
+      }
+      stopRecordedStoryAudio();
+      const audio = new Audio(source);
+      state.story.audio = audio;
+      state.story.audioResolve = resolve;
+      audio.preload = "auto";
+      audio.onended = () => {
+        if (state.story.audio === audio) state.story.audio = null;
+        if (state.story.audioResolve === resolve) state.story.audioResolve = null;
+        resolve(storySequenceValid(sequence));
+      };
+      audio.onerror = () => {
+        if (state.story.audio === audio) state.story.audio = null;
+        if (state.story.audioResolve === resolve) state.story.audioResolve = null;
+        resolve(null);
+      };
+      audio.play().catch(() => {
+        if (state.story.audio === audio) state.story.audio = null;
+        if (state.story.audioResolve === resolve) state.story.audioResolve = null;
+        resolve(null);
+      });
+    });
+  }
+
   function renderStoryScene() {
     const episode = state.story.episode;
     const scene = episode?.scenes?.[state.story.sceneIndex];
@@ -775,7 +825,7 @@
     const total = episode.scenes.length;
     dom.storyProgress.textContent = `${state.story.sceneIndex + 1} / ${total}`;
     dom.storyProgressBar.style.width = `${((state.story.sceneIndex + 1) / total) * 100}%`;
-    dom.storyEpisode.textContent = `제${episode.episode}화 · ${episode.subject}`;
+    dom.storyEpisode.textContent = `제${episode.episode}화 · ${episode.subject}${episode.timeline ? ` · ${episode.timeline}` : ""}`;
     dom.storyTitle.textContent = episode.title;
     dom.storySceneTitle.textContent = scene.title;
     dom.storyText.replaceChildren();
@@ -783,12 +833,6 @@
       const element = document.createElement("p");
       element.textContent = paragraph;
       dom.storyText.append(element);
-    });
-    dom.storyMnemonics.replaceChildren();
-    (scene.mnemonics || []).forEach((mnemonic) => {
-      const chip = document.createElement("b");
-      chip.textContent = mnemonic;
-      dom.storyMnemonics.append(chip);
     });
     dom.storyPrev.disabled = state.story.sceneIndex === 0;
     dom.storyNext.textContent = state.story.sceneIndex === total - 1 ? "이야기 마침" : "다음 장면";
@@ -851,6 +895,7 @@
     state.story.active = false;
     state.story.paused = false;
     state.story.sequence += 1;
+    stopRecordedStoryAudio(false);
     state.story.wakeLock?.release?.().catch(() => {});
     state.story.wakeLock = null;
     clearStoryPosition();
@@ -869,10 +914,18 @@
     if (!scene) return;
     renderStoryScene();
     saveStoryPosition();
-    const parts = [`${state.story.sceneIndex + 1}장. ${scene.title}`, ...storySegments(scene.text)];
-    if (scene.mnemonics?.length) parts.push(`이 장면의 기억 주문. ${scene.mnemonics.join(". ")}`);
-    for (const part of parts) {
-      if (!(await storySpeak(part, 0.92, sequence))) return;
+    let recordedResult = null;
+    if (scene.audio) recordedResult = await playRecordedStoryAudio(scene.audio, sequence);
+    if (recordedResult === false) return;
+    if (recordedResult === null) {
+      if (!speechSupported()) {
+        showToast("녹음 음성을 불러오지 못했습니다. 네트워크 연결을 확인해주세요.");
+        return;
+      }
+      const parts = [`${state.story.sceneIndex + 1}장. ${scene.title}`, ...storySegments(scene.text)];
+      for (const part of parts) {
+        if (!(await storySpeak(part, 0.92, sequence))) return;
+      }
     }
     if (!storySequenceValid(sequence)) return;
     if (state.story.sceneIndex >= state.story.episode.scenes.length - 1) {
@@ -904,17 +957,21 @@
     dom.storyNext.disabled = false;
     showScreen("story");
     requestStoryWakeLock();
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.resume();
+    if (speechSupported()) {
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.resume();
+    }
     narrateStoryScene(state.story.sequence);
   }
 
-  function startStory() {
-    if (!speechSupported()) {
+  function startStory(episodeId) {
+    const episode = storyById(episodeId) || STORIES[0];
+    const hasRecordedAudio = episode?.scenes?.some((scene) => scene.audio);
+    if (!hasRecordedAudio && !speechSupported()) {
       showToast("이 브라우저에서는 이야기 음성 듣기를 지원하지 않습니다.");
       return;
     }
-    beginStory(STORIES[0], 0);
+    beginStory(episode, 0);
   }
 
   async function startVoiceSample() {
@@ -934,15 +991,16 @@
   }
 
   function resumeSavedStory() {
-    if (!speechSupported()) {
-      showToast("이 브라우저에서는 이야기 음성 듣기를 지원하지 않습니다.");
-      return;
-    }
     const saved = state.savedStory;
     const episode = storyById(saved?.episodeId);
     if (!saved || !episode) {
       updateResumeStory();
       showToast("이어 들을 이야기를 찾지 못했습니다.");
+      return;
+    }
+    const hasRecordedAudio = episode.scenes.some((scene) => scene.audio);
+    if (!hasRecordedAudio && !speechSupported()) {
+      showToast("이 브라우저에서는 이야기 음성 듣기를 지원하지 않습니다.");
       return;
     }
     const sceneIndex = Math.max(0, Math.min(Number(saved.sceneIndex || 0), episode.scenes.length - 1));
@@ -955,6 +1013,7 @@
     state.story.active = false;
     state.story.paused = false;
     state.story.sequence += 1;
+    stopRecordedStoryAudio();
     if (speechSupported()) window.speechSynthesis.cancel();
     state.story.wakeLock?.release?.().catch(() => {});
     state.story.wakeLock = null;
@@ -974,10 +1033,13 @@
     }
     state.story.active = true;
     state.story.paused = false;
+    stopRecordedStoryAudio();
     state.story.sceneIndex = nextIndex;
     state.story.sequence += 1;
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.resume();
+    if (speechSupported()) {
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.resume();
+    }
     dom.storyNext.disabled = false;
     narrateStoryScene(state.story.sequence);
   }
@@ -985,8 +1047,13 @@
   function toggleStory() {
     if (!state.story.active) return;
     state.story.paused = !state.story.paused;
-    if (state.story.paused) window.speechSynthesis.pause();
-    else window.speechSynthesis.resume();
+    if (state.story.audio) {
+      if (state.story.paused) state.story.audio.pause();
+      else state.story.audio.play().catch(() => showToast("재생 버튼을 한 번 더 눌러주세요."));
+    } else if (speechSupported()) {
+      if (state.story.paused) window.speechSynthesis.pause();
+      else window.speechSynthesis.resume();
+    }
     renderStoryScene();
   }
 
@@ -1154,7 +1221,7 @@
     dom.resumeStudy.addEventListener("click", resumeSavedStudy);
     dom.startListening.addEventListener("click", startListening);
     dom.resumeListening.addEventListener("click", resumeSavedListening);
-    dom.startStory.addEventListener("click", startStory);
+    dom.startStoryButtons.forEach((button) => button.addEventListener("click", () => startStory(button.dataset.storyId)));
     dom.startVoiceSample.addEventListener("click", startVoiceSample);
     dom.resumeStory.addEventListener("click", resumeSavedStory);
     $('[data-stop-listening]').addEventListener("click", () => stopListening(true));
@@ -1165,7 +1232,7 @@
     dom.storyToggle.addEventListener("click", toggleStory);
     dom.storyPrev.addEventListener("click", () => changeStoryScene(-1));
     dom.storyNext.addEventListener("click", () => changeStoryScene(1));
-    $('[data-story-restart]').addEventListener("click", () => beginStory(STORIES[0], 0));
+    $('[data-story-restart]').addEventListener("click", () => beginStory(state.story.episode || STORIES[0], 0));
     dom.reveal.addEventListener("click", revealMnemonic);
     $$('[data-rating]').forEach((button) => button.addEventListener("click", () => rateCard(button.dataset.rating)));
     $$('[data-go-home]').forEach((button) => button.addEventListener("click", goHome));

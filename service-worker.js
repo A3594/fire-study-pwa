@@ -1,11 +1,14 @@
-const CACHE_NAME = "fire-study-pwa-v13";
+const CACHE_NAME = "fire-study-pwa-v19";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./styles.css?v=7",
-  "./app.js?v=13",
+  "./app.js?v=19",
   "./cards-data.js?v=1",
-  "./stories-data.js?v=1",
+  "./stories-data.js?v=4",
+  "./episode-2-data.js?v=2",
+  "./episode-3-data.js?v=1",
+  "./episode-4-data.js?v=1",
   "./manifest.webmanifest",
   "./icon.svg",
   "./icon-192.png",

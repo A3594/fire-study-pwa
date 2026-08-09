@@ -1,0 +1,71 @@
+{
+  "episode": 1,
+  "title": "불의 도서관과 첫 번째 소화마법",
+  "model": "gpt-4o-mini-tts",
+  "generatedAt": "2026-08-09T21:52:40.658Z",
+  "sampleRate": 24000,
+  "totalSeconds": 1313.6,
+  "completeFile": "episode-1-complete.mp3",
+  "scenes": [
+    {
+      "scene": 1,
+      "title": "야근하던 밤, 불의 도서관",
+      "file": "scene-01.mp3",
+      "durationSeconds": 191
+    },
+    {
+      "scene": 2,
+      "title": "다섯 색으로 갈라진 불꽃",
+      "file": "scene-02.mp3",
+      "durationSeconds": 114.6
+    },
+    {
+      "scene": 3,
+      "title": "작은 방패와 바퀴 달린 거인",
+      "file": "scene-03.mp3",
+      "durationSeconds": 108.4
+    },
+    {
+      "scene": 4,
+      "title": "두 개의 주방과 다섯 개의 열쇠",
+      "file": "scene-04.mp3",
+      "durationSeconds": 107.7
+    },
+    {
+      "scene": 5,
+      "title": "자동마법 장치의 회랑",
+      "file": "scene-05.mp3",
+      "durationSeconds": 110.5
+    },
+    {
+      "scene": 6,
+      "title": "약제 연금술사의 표",
+      "file": "scene-06.mp3",
+      "durationSeconds": 120.7
+    },
+    {
+      "scene": 7,
+      "title": "능력단위의 네 계단",
+      "file": "scene-07.mp3",
+      "durationSeconds": 112
+    },
+    {
+      "scene": 8,
+      "title": "부속용도의 미궁",
+      "file": "scene-08.mp3",
+      "durationSeconds": 116.6
+    },
+    {
+      "scene": 9,
+      "title": "가스 탑의 숫자 파수꾼",
+      "file": "scene-09.mp3",
+      "durationSeconds": 121.8
+    },
+    {
+      "scene": 10,
+      "title": "감소의 문과 첫 번째 약속",
+      "file": "scene-10.mp3",
+      "durationSeconds": 199.6
+    }
+  ]
+}

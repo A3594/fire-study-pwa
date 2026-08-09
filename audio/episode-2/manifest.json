@@ -1,0 +1,71 @@
+{
+  "episode": 2,
+  "title": "옥내소화전의 붉은 수룡",
+  "model": "gpt-4o-mini-tts",
+  "generatedAt": "2026-08-09T22:10:25.095Z",
+  "sampleRate": 24000,
+  "totalSeconds": 848.6,
+  "completeFile": "episode-2-complete.mp3",
+  "scenes": [
+    {
+      "scene": 1,
+      "title": "붉은 용이 잠든 백화점",
+      "file": "scene-01.mp3",
+      "durationSeconds": 92.7
+    },
+    {
+      "scene": 2,
+      "title": "옥상수조의 여덟 계단",
+      "file": "scene-02.mp3",
+      "durationSeconds": 83
+    },
+    {
+      "scene": 3,
+      "title": "수룡의 두 심장",
+      "file": "scene-03.mp3",
+      "durationSeconds": 83.7
+    },
+    {
+      "scene": 4,
+      "title": "세 개의 압력탑",
+      "file": "scene-04.mp3",
+      "durationSeconds": 73.3
+    },
+    {
+      "scene": 5,
+      "title": "쇠뼈와 은빛 혈관",
+      "file": "scene-05.mp3",
+      "durationSeconds": 84.8
+    },
+    {
+      "scene": 6,
+      "title": "일곱 표식의 송수구",
+      "file": "scene-06.mp3",
+      "durationSeconds": 84.7
+    },
+    {
+      "scene": 7,
+      "title": "꺼진 도시의 비상전원",
+      "file": "scene-07.mp3",
+      "durationSeconds": 78.2
+    },
+    {
+      "scene": 8,
+      "title": "수룡의 두뇌, 제어반",
+      "file": "scene-08.mp3",
+      "durationSeconds": 65.3
+    },
+    {
+      "scene": 9,
+      "title": "불꽃을 견디는 신경망",
+      "file": "scene-09.mp3",
+      "durationSeconds": 72.3
+    },
+    {
+      "scene": 10,
+      "title": "옥상에서 맺은 첫 계약",
+      "file": "scene-10.mp3",
+      "durationSeconds": 119.8
+    }
+  ]
+}
