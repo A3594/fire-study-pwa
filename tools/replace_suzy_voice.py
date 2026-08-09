@@ -80,6 +80,23 @@ def normalize(samples: array.array) -> array.array:
     return normalized
 
 
+def trim_silence(samples: array.array) -> array.array:
+    """Remove API-added edge silence while keeping a short natural pad."""
+    frame_length = round(SAMPLE_RATE * 0.02)
+    active_frames: list[int] = []
+    for frame_index, start in enumerate(range(0, len(samples), frame_length)):
+        frame = samples[start : start + frame_length]
+        rms = math.sqrt(sum(sample * sample for sample in frame) / max(1, len(frame)))
+        if rms > 120:
+            active_frames.append(frame_index)
+    if not active_frames:
+        return samples
+    padding = round(SAMPLE_RATE * 0.04)
+    start = max(0, active_frames[0] * frame_length - padding)
+    end = min(len(samples), (active_frames[-1] + 1) * frame_length + padding)
+    return samples[start:end]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("audio", type=Path)
@@ -94,9 +111,10 @@ def main() -> None:
     original = read_wav(args.audio)
     result = array.array("h", original)
     duration = len(result) / SAMPLE_RATE
+    second_speech_end = None
 
     for erase_start, erase_end, speech_start, filename in REPLACEMENTS:
-        clip = normalize(read_wav(args.clips / filename))
+        clip = normalize(trim_silence(read_wav(args.clips / filename)))
         erase_from = round(erase_start * SAMPLE_RATE)
         erase_to = round(erase_end * SAMPLE_RATE)
         insert_at = round(speech_start * SAMPLE_RATE)
@@ -113,13 +131,20 @@ def main() -> None:
             duck = 0.65 if abs(voice_sample) > 180 else 1.0
             mixed = voice_sample + background_at(index / SAMPLE_RATE, duration) * duck
             result[index] = max(-32768, min(32767, round(mixed)))
+        if filename == "2.wav":
+            second_speech_end = (insert_at + len(clip)) / SAMPLE_RATE
 
     if args.compact_openai:
         # The original slow character clip occupied this interval. Keep a natural
         # conversational pause, then crossfade the continuous music into Taehoo.
-        cut_from = round(142.70 * SAMPLE_RATE)
+        if second_speech_end is None:
+            raise ValueError("두 번째 수지 대사 구간을 찾지 못했습니다.")
+        cut_from_seconds = max(142.70, second_speech_end + 0.55)
+        cut_from = round(cut_from_seconds * SAMPLE_RATE)
         cut_to = round(146.95 * SAMPLE_RATE)
         fade_length = round(0.08 * SAMPLE_RATE)
+        if cut_from + fade_length >= cut_to:
+            raise ValueError("두 번째 대사가 너무 길어 공백을 자연스럽게 줄일 수 없습니다.")
         crossfade = array.array("h")
         for offset in range(fade_length):
             ratio = offset / max(1, fade_length - 1)

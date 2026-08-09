@@ -11,10 +11,10 @@
   const STUDY_SESSION_KEY = "fire-study-active-session-v1";
   const STORY_KEY = "fire-study-story-position-v1";
   const APP_RELEASE = {
-    id: "2026-08-09-voice-sample-scene-1-v4",
-    date: "2026-08-09",
-    label: "2026.08.09",
-    note: "1장 수지 역할을 OpenAI 음성으로 재제작"
+    id: "2026-08-10-voice-sample-scene-1-v5",
+    date: "2026-08-10",
+    label: "2026.08.10",
+    note: "1장 해설자·수지 음성을 marin으로 통일하고 수지는 즐거운 억양으로 재제작"
   };
   const DAY = 24 * 60 * 60 * 1000;
   const MINUTE = 60 * 1000;
