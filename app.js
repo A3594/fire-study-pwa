@@ -11,10 +11,10 @@
   const STUDY_SESSION_KEY = "fire-study-active-session-v1";
   const STORY_KEY = "fire-study-story-position-v1";
   const APP_RELEASE = {
-    id: "2026-08-10-episode-2-full-voice-v1",
+    id: "2026-08-10-background-audio-v1",
     date: "2026-08-10",
     label: "2026.08.10",
-    note: "2화 옥내소화전 전체 3인 음성 및 배경음 추가"
+    note: "1·2화 화면 잠금 및 백그라운드 연속 재생 추가"
   };
   const DAY = 24 * 60 * 60 * 1000;
   const MINUTE = 60 * 1000;
@@ -131,6 +131,8 @@
       sequence: 0,
       audio: null,
       audioResolve: null,
+      audioTime: 0,
+      lastSavedAudioSecond: -1,
       wakeLock: null
     }
   };
@@ -774,6 +776,10 @@
     if (audio) {
       audio.onended = null;
       audio.onerror = null;
+      audio.onloadedmetadata = null;
+      audio.ontimeupdate = null;
+      audio.onplay = null;
+      audio.onpause = null;
       audio.pause();
       if (reset) {
         try {
@@ -787,6 +793,132 @@
     const resolve = state.story.audioResolve;
     state.story.audioResolve = null;
     resolve?.(false);
+  }
+
+  function updateMediaSessionPosition(audio) {
+    if (!("mediaSession" in navigator) || typeof navigator.mediaSession.setPositionState !== "function") return;
+    if (!Number.isFinite(audio.duration) || audio.duration <= 0) return;
+    try {
+      navigator.mediaSession.setPositionState({
+        duration: audio.duration,
+        playbackRate: audio.playbackRate || 1,
+        position: Math.max(0, Math.min(audio.currentTime || 0, audio.duration))
+      });
+    } catch {
+      // 일부 모바일 브라우저는 화면 잠금 직후 위치 갱신을 거부할 수 있습니다.
+    }
+  }
+
+  function configureStoryMediaSession(episode, audio) {
+    if (!("mediaSession" in navigator)) return;
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: `${episode.episode}화 · ${episode.title}`,
+        artist: "기억의 불꽃 안전연구소",
+        album: episode.subject,
+        artwork: [
+          { src: "./icon-192.png", sizes: "192x192", type: "image/png" },
+          { src: "./icon-512.png", sizes: "512x512", type: "image/png" }
+        ]
+      });
+      navigator.mediaSession.setActionHandler("play", () => {
+        state.story.paused = false;
+        audio.play().catch(() => {});
+        renderStoryScene();
+      });
+      navigator.mediaSession.setActionHandler("pause", () => {
+        state.story.paused = true;
+        audio.pause();
+        renderStoryScene();
+      });
+      navigator.mediaSession.setActionHandler("seekbackward", (details) => {
+        audio.currentTime = Math.max(0, audio.currentTime - Number(details.seekOffset || 10));
+      });
+      navigator.mediaSession.setActionHandler("seekforward", (details) => {
+        audio.currentTime = Math.min(audio.duration || Infinity, audio.currentTime + Number(details.seekOffset || 10));
+      });
+      navigator.mediaSession.setActionHandler("seekto", (details) => {
+        if (Number.isFinite(details.seekTime)) audio.currentTime = details.seekTime;
+      });
+      navigator.mediaSession.setActionHandler("previoustrack", () => changeStoryScene(-1));
+      navigator.mediaSession.setActionHandler("nexttrack", () => changeStoryScene(1));
+    } catch {
+      // Media Session 미지원 동작은 기본 오디오 재생에 영향을 주지 않습니다.
+    }
+  }
+
+  function storySceneAtTime(episode, time) {
+    const offsets = Array.isArray(episode.sceneOffsets) ? episode.sceneOffsets : [];
+    let index = 0;
+    for (let candidate = 0; candidate < offsets.length; candidate += 1) {
+      if (time + 0.05 >= offsets[candidate]) index = candidate;
+      else break;
+    }
+    return Math.max(0, Math.min(index, episode.scenes.length - 1));
+  }
+
+  function playCompleteStoryAudio(episode, startTime, sequence) {
+    return new Promise((resolve) => {
+      if (!storySequenceValid(sequence)) {
+        resolve(false);
+        return;
+      }
+      stopRecordedStoryAudio();
+      const audio = new Audio(episode.completeAudio);
+      state.story.audio = audio;
+      state.story.audioResolve = resolve;
+      audio.preload = "auto";
+      audio.playsInline = true;
+      configureStoryMediaSession(episode, audio);
+      audio.onloadedmetadata = () => {
+        audio.currentTime = Math.max(0, Math.min(Number(startTime || 0), Math.max(0, audio.duration - 0.1)));
+        updateMediaSessionPosition(audio);
+      };
+      audio.ontimeupdate = () => {
+        if (!storySequenceValid(sequence) || state.story.audio !== audio) return;
+        state.story.audioTime = audio.currentTime;
+        const nextSceneIndex = storySceneAtTime(episode, audio.currentTime);
+        if (nextSceneIndex !== state.story.sceneIndex) {
+          state.story.sceneIndex = nextSceneIndex;
+          renderStoryScene();
+          saveStoryPosition();
+        }
+        const second = Math.floor(audio.currentTime);
+        if (second % 5 === 0 && second !== state.story.lastSavedAudioSecond) {
+          state.story.lastSavedAudioSecond = second;
+          saveStoryPosition();
+          updateMediaSessionPosition(audio);
+        }
+      };
+      audio.onplay = () => {
+        state.story.paused = false;
+        if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "playing";
+        renderStoryScene();
+      };
+      audio.onpause = () => {
+        if (!state.story.active || state.story.audio !== audio) return;
+        state.story.paused = true;
+        if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "paused";
+        saveStoryPosition();
+        renderStoryScene();
+      };
+      audio.onended = () => {
+        if (state.story.audio === audio) state.story.audio = null;
+        if (state.story.audioResolve === resolve) state.story.audioResolve = null;
+        if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "none";
+        resolve(storySequenceValid(sequence));
+      };
+      audio.onerror = () => {
+        if (state.story.audio === audio) state.story.audio = null;
+        if (state.story.audioResolve === resolve) state.story.audioResolve = null;
+        resolve(null);
+      };
+      audio.play().catch(() => {
+        if (state.story.audio === audio) state.story.audio = null;
+        if (state.story.audioResolve === resolve) state.story.audioResolve = null;
+        resolve(null);
+      });
+    });
   }
 
   function playRecordedStoryAudio(source, sequence) {
@@ -860,6 +992,7 @@
     const saved = {
       episodeId: state.story.episode.id,
       sceneIndex: state.story.sceneIndex,
+      audioTime: Number((state.story.audio?.currentTime || state.story.audioTime || 0).toFixed(1)),
       updatedAt: Date.now()
     };
     state.savedStory = saved;
@@ -914,6 +1047,14 @@
     if (!scene) return;
     renderStoryScene();
     saveStoryPosition();
+    if (state.story.episode.completeAudio) {
+      const completeResult = await playCompleteStoryAudio(state.story.episode, state.story.audioTime, sequence);
+      if (completeResult === false) return;
+      if (completeResult === true) {
+        finishStory();
+        return;
+      }
+    }
     let recordedResult = null;
     if (scene.audio) recordedResult = await playRecordedStoryAudio(scene.audio, sequence);
     if (recordedResult === false) return;
@@ -937,7 +1078,7 @@
     narrateStoryScene(state.story.sequence);
   }
 
-  function beginStory(episode, sceneIndex = 0) {
+  function beginStory(episode, sceneIndex = 0, audioTime = null) {
     if (!episode?.scenes?.length) {
       showToast("재생할 이야기를 찾지 못했습니다.");
       return;
@@ -953,10 +1094,14 @@
     state.story.paused = false;
     state.story.episode = episode;
     state.story.sceneIndex = Math.max(0, Math.min(Number(sceneIndex || 0), episode.scenes.length - 1));
+    const sceneOffset = Number(episode.sceneOffsets?.[state.story.sceneIndex] || 0);
+    const hasAudioTime = audioTime !== null && audioTime !== undefined && Number.isFinite(Number(audioTime));
+    state.story.audioTime = hasAudioTime ? Number(audioTime) : sceneOffset;
+    state.story.lastSavedAudioSecond = -1;
     state.story.sequence += 1;
     dom.storyNext.disabled = false;
     showScreen("story");
-    requestStoryWakeLock();
+    if (!episode.completeAudio) requestStoryWakeLock();
     if (speechSupported()) {
       window.speechSynthesis.cancel();
       window.speechSynthesis.resume();
@@ -1004,7 +1149,7 @@
       return;
     }
     const sceneIndex = Math.max(0, Math.min(Number(saved.sceneIndex || 0), episode.scenes.length - 1));
-    beginStory(episode, sceneIndex);
+    beginStory(episode, sceneIndex, Number(saved.audioTime || episode.sceneOffsets?.[sceneIndex] || 0));
     showToast(`${sceneIndex + 1}번째 장면부터 이어 듣습니다.`);
   }
 
@@ -1035,6 +1180,8 @@
     state.story.paused = false;
     stopRecordedStoryAudio();
     state.story.sceneIndex = nextIndex;
+    state.story.audioTime = Number(state.story.episode.sceneOffsets?.[nextIndex] || 0);
+    state.story.lastSavedAudioSecond = -1;
     state.story.sequence += 1;
     if (speechSupported()) {
       window.speechSynthesis.cancel();

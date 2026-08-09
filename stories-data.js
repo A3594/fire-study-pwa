@@ -146,7 +146,17 @@ window.FIRE_STUDY_STORIES = [
 
 (() => {
   const episode = window.FIRE_STUDY_STORIES.find((item) => item.id === "nftc101-episode-1");
+  const durations = [191, 114.6, 108.4, 107.7, 110.5, 120.7, 112, 116.6, 121.8, 199.6];
   episode?.scenes?.forEach((scene, index) => {
     scene.audio = `./audio/episode-1/scene-${String(index + 1).padStart(2, "0")}.mp3?v=1`;
   });
+  if (episode) {
+    episode.completeAudio = "./audio/episode-1/episode-1-complete.mp3?v=1";
+    let offset = 0;
+    episode.sceneOffsets = durations.map((duration, index) => {
+      const current = offset;
+      offset += duration + (index < durations.length - 1 ? 1.2 : 0);
+      return Number(current.toFixed(1));
+    });
+  }
 })();

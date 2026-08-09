@@ -1,12 +1,12 @@
-const CACHE_NAME = "fire-study-pwa-v19";
+const CACHE_NAME = "fire-study-pwa-v20";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./styles.css?v=7",
-  "./app.js?v=19",
+  "./app.js?v=20",
   "./cards-data.js?v=1",
-  "./stories-data.js?v=4",
-  "./episode-2-data.js?v=2",
+  "./stories-data.js?v=5",
+  "./episode-2-data.js?v=3",
   "./episode-3-data.js?v=1",
   "./episode-4-data.js?v=1",
   "./manifest.webmanifest",
@@ -29,6 +29,7 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
+  if (event.request.headers.has("range")) return;
   const requestUrl = new URL(event.request.url);
   if (requestUrl.origin !== self.location.origin) return;
 
