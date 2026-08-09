@@ -4,7 +4,6 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const apiKey = process.env.OPENAI_API_KEY;
-if (!apiKey) throw new Error("OPENAI_API_KEY 환경 변수가 필요합니다.");
 
 const toolDir = dirname(fileURLToPath(import.meta.url));
 const projectDir = resolve(toolDir, "..");
@@ -17,12 +16,12 @@ const roles = {
     instructions: "한국어 판타지 오디오북의 여성 해설자처럼 차분하고 자연스럽게 연기한다. 문장 사이에는 여유를 두고, 위험한 장면은 낮고 긴장감 있게, 학습 용어와 숫자는 또렷하게 발음한다. 특정 실제 인물의 목소리를 모사하지 않는다."
   },
   suzy: {
-    voice: "coral",
-    instructions: "한국어 판타지 드라마 속 밝고 용감한 젊은 여성 등장인물처럼 자연스럽게 연기한다. 다급한 장면에서도 대사는 또렷하게 말한다. 따뜻함과 결단력이 함께 느껴지게 한다. 특정 실제 인물의 목소리를 모사하지 않는다."
+    voice: "shimmer",
+    instructions: "젊은 한국인 여성 등장인물의 일상적인 말투로 자연스럽고 또렷하게 말한다. 과장된 연기나 지나치게 높은 목소리는 피하고, 긴급한 대사에서도 속도를 서두르지 않는다. 특정 실제 인물의 목소리를 모사하지 않는다."
   },
   taehoo: {
-    voice: "cedar",
-    instructions: "평범한 한국인 회사원 남성이 갑작스럽게 마법을 깨우는 장면처럼 자연스럽게 연기한다. 처음에는 당황하지만 주문을 외울수록 확신이 생긴다. 니모닉과 기술 용어는 느리고 정확하게 발음한다. 특정 실제 인물의 목소리를 모사하지 않는다."
+    voice: "onyx",
+    instructions: "차분한 한국인 남성 회사원의 담백한 일상 말투로 말한다. 영웅처럼 과장하지 말고, 주문과 숫자만 조금 더 천천히 끊어서 정확하게 발음한다. 특정 실제 인물의 목소리를 모사하지 않는다."
   }
 };
 
@@ -166,7 +165,7 @@ function normalizedSamples(samples) {
   return Int16Array.from(samples, (sample) => Math.max(-32768, Math.min(32767, Math.round(sample * scale))));
 }
 
-function backgroundAt(time, duration) {
+function backgroundAt(time, duration, gain = 1) {
   const chords = [
     [130.81, 155.56, 196.0],
     [103.83, 130.81, 155.56],
@@ -176,18 +175,37 @@ function backgroundAt(time, duration) {
   const chord = chords[Math.floor(time / 9) % chords.length];
   const breathe = 0.58 + 0.42 * Math.sin(2 * Math.PI * 0.045 * time) ** 2;
   let value = breathe * (
-    300 * Math.sin(2 * Math.PI * chord[0] * time) +
-    205 * Math.sin(2 * Math.PI * chord[1] * time + 0.7) +
-    150 * Math.sin(2 * Math.PI * chord[2] * time + 1.4)
+    720 * Math.sin(2 * Math.PI * chord[0] * time) +
+    480 * Math.sin(2 * Math.PI * chord[1] * time + 0.7) +
+    350 * Math.sin(2 * Math.PI * chord[2] * time + 1.4) +
+    210 * Math.sin(2 * Math.PI * chord[2] * 2 * time + 0.35)
   );
   const bellPosition = time % 13.5;
   if (bellPosition < 1.8) {
     const decay = Math.exp(-2.35 * bellPosition);
     const bell = [523.25, 659.25, 783.99][Math.floor(time / 13.5) % 3];
-    value += 520 * decay * Math.sin(2 * Math.PI * bell * bellPosition);
+    value += 1350 * decay * Math.sin(2 * Math.PI * bell * bellPosition);
   }
   const fade = Math.min(1, time / 2.2, (duration - time) / 2.2);
-  return value * Math.max(0, fade);
+  return value * Math.max(0, fade) * gain;
+}
+
+async function boostExistingBackground() {
+  const parsed = parseWav(await readFile(outputPath));
+  const duration = parsed.samples.length / parsed.sampleRate;
+  const remixed = new Int16Array(parsed.samples.length);
+  for (let index = 0; index < parsed.samples.length; index += 1) {
+    const time = index / parsed.sampleRate;
+    const oldBackground = backgroundAt(time, duration, 1);
+    const quietCandidate = parsed.samples[index] - oldBackground;
+    const duckedCandidate = parsed.samples[index] - oldBackground * 0.72;
+    const narration = Math.abs(duckedCandidate) > 600 ? duckedCandidate : quietCandidate;
+    const newDuck = Math.abs(narration) > 600 ? 0.65 : 1;
+    const emphasizedBackground = backgroundAt(time, duration, 2.4) * newDuck;
+    remixed[index] = Math.max(-32768, Math.min(32767, Math.round(narration + emphasizedBackground)));
+  }
+  await writeFile(outputPath, wavBuffer(remixed, parsed.sampleRate));
+  process.stdout.write(`배경음 강화 완료: ${outputPath}\n`);
 }
 
 async function synthesize(segment, index, tempDir) {
@@ -216,6 +234,7 @@ async function synthesize(segment, index, tempDir) {
 }
 
 async function main() {
+  if (!apiKey) throw new Error("OPENAI_API_KEY 환경 변수가 필요합니다.");
   await mkdir(outputDir, { recursive: true });
   const tempDir = await mkdtemp(join(tmpdir(), "fire-study-voice-"));
   try {
@@ -234,8 +253,8 @@ async function main() {
       clips.push({ samples: normalizedSamples(parsed.samples), pauseMs: script[index].pauseMs });
     }
 
-    const leadIn = Math.round(sampleRate * 1.6);
-    const leadOut = Math.round(sampleRate * 2.2);
+    const leadIn = Math.round(sampleRate * 3.4);
+    const leadOut = Math.round(sampleRate * 3.6);
     const totalSamples = leadIn + leadOut + clips.reduce(
       (total, clip) => total + clip.samples.length + Math.round(sampleRate * clip.pauseMs / 1000),
       0
@@ -251,8 +270,8 @@ async function main() {
     const duration = totalSamples / sampleRate;
     for (let index = 0; index < totalSamples; index += 1) {
       const narration = voice[index];
-      const duck = Math.abs(narration) > 600 ? 0.52 : 1;
-      const background = backgroundAt(index / sampleRate, duration) * duck;
+      const duck = Math.abs(narration) > 600 ? 0.65 : 1;
+      const background = backgroundAt(index / sampleRate, duration, 2.4) * duck;
       mixed[index] = Math.max(-32768, Math.min(32767, Math.round(narration + background)));
     }
 
@@ -264,4 +283,5 @@ async function main() {
   }
 }
 
-await main();
+if (process.argv.includes("--boost-existing")) await boostExistingBackground();
+else await main();

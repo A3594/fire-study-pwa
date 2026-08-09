@@ -11,10 +11,10 @@
   const STUDY_SESSION_KEY = "fire-study-active-session-v1";
   const STORY_KEY = "fire-study-story-position-v1";
   const APP_RELEASE = {
-    id: "2026-08-09-voice-sample-scene-1",
+    id: "2026-08-09-voice-sample-scene-1-v2",
     date: "2026-08-09",
     label: "2026.08.09",
-    note: "소화기구 이야기 1장 3인 AI 음성·배경음 샘플 추가"
+    note: "1장 수지·태후 역할 음성 교체 및 배경음 강화"
   };
   const DAY = 24 * 60 * 60 * 1000;
   const MINUTE = 60 * 1000;
