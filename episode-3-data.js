@@ -119,3 +119,20 @@ window.FIRE_STUDY_STORIES.push(
   ]
 }
 );
+
+(() => {
+  const episode = window.FIRE_STUDY_STORIES.find((item) => item.id === "nftc103-episode-3");
+  const durations = [99.2, 84.7, 95.1, 87.7, 96.8, 78.6, 82.6, 83.2, 84.2, 137.5];
+  episode?.scenes?.forEach((scene, index) => {
+    scene.audio = `./audio/episode-3/scene-${String(index + 1).padStart(2, "0")}.mp3?v=1`;
+  });
+  if (episode) {
+    episode.completeAudio = "./audio/episode-3/episode-3-complete.mp3?v=1";
+    let offset = 0;
+    episode.sceneOffsets = durations.map((duration, index) => {
+      const current = offset;
+      offset += duration + (index < durations.length - 1 ? 1.2 : 0);
+      return Number(current.toFixed(1));
+    });
+  }
+})();

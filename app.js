@@ -11,10 +11,10 @@
   const STUDY_SESSION_KEY = "fire-study-active-session-v1";
   const STORY_KEY = "fire-study-story-position-v1";
   const APP_RELEASE = {
-    id: "2026-08-10-background-audio-v1",
+    id: "2026-08-10-episode-3-full-voice-v1",
     date: "2026-08-10",
     label: "2026.08.10",
-    note: "1·2화 화면 잠금 및 백그라운드 연속 재생 추가"
+    note: "3화 스프링클러 전체 음성 및 화면 잠금 재생 추가"
   };
   const DAY = 24 * 60 * 60 * 1000;
   const MINUTE = 60 * 1000;

@@ -1,0 +1,71 @@
+{
+  "episode": 3,
+  "title": "스파이더 히어로의 은빛 물거미망",
+  "model": "gpt-4o-mini-tts",
+  "generatedAt": "2026-08-09T22:34:31.819Z",
+  "sampleRate": 24000,
+  "totalSeconds": 940.4,
+  "completeFile": "episode-3-complete.mp3",
+  "scenes": [
+    {
+      "scene": 1,
+      "title": "천장에 내려온 은빛 거미",
+      "file": "scene-01.mp3",
+      "durationSeconds": 99.2
+    },
+    {
+      "scene": 2,
+      "title": "다섯 거미의 성질",
+      "file": "scene-02.mp3",
+      "durationSeconds": 84.7
+    },
+    {
+      "scene": 3,
+      "title": "살수밀도의 푸른 비",
+      "file": "scene-03.mp3",
+      "durationSeconds": 95.1
+    },
+    {
+      "scene": 4,
+      "title": "트리와 그리드와 루프",
+      "file": "scene-04.mp3",
+      "durationSeconds": 87.7
+    },
+    {
+      "scene": 5,
+      "title": "말단시험과 붉은 경보",
+      "file": "scene-05.mp3",
+      "durationSeconds": 96.8
+    },
+    {
+      "scene": 6,
+      "title": "헤드가 지키는 거리",
+      "file": "scene-06.mp3",
+      "durationSeconds": 78.6
+    },
+    {
+      "scene": 7,
+      "title": "기울어진 천장의 춤",
+      "file": "scene-07.mp3",
+      "durationSeconds": 82.6
+    },
+    {
+      "scene": 8,
+      "title": "아홉 관문의 송수구",
+      "file": "scene-08.mp3",
+      "durationSeconds": 83.2
+    },
+    {
+      "scene": 9,
+      "title": "소방전원을 지키는 심장",
+      "file": "scene-09.mp3",
+      "durationSeconds": 84.2
+    },
+    {
+      "scene": 10,
+      "title": "물거미 특허와 두 번째 키스",
+      "file": "scene-10.mp3",
+      "durationSeconds": 137.5
+    }
+  ]
+}
