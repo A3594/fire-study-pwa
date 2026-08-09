@@ -9,7 +9,7 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./icon-192.png" />
-    <link rel="stylesheet" href="./styles.css?v=5" />
+    <link rel="stylesheet" href="./styles.css?v=6" />
   </head>
   <body>
     <div class="app-shell">
@@ -104,6 +104,17 @@
             </button>
           </section>
 
+          <section class="story-panel">
+            <div class="story-kicker"><span>새 학습 이야기</span><b>EP. 1</b></div>
+            <h2>불의 도서관과 첫 번째 소화마법</h2>
+            <p>소화기구의 문제와 니모닉이 판타지 주문으로 이어지는 수지와 태후의 이야기입니다.</p>
+            <small>학습용 창작물이며 실제 인물·사건과 무관합니다.</small>
+            <div class="story-actions">
+              <button type="button" data-start-story><span aria-hidden="true">▶</span> 1화 처음부터 듣기</button>
+              <button type="button" data-resume-story hidden><span aria-hidden="true">↻</span><span><b>이어 듣기</b><small data-resume-story-copy></small></span></button>
+            </div>
+          </section>
+
           <section class="guide-panel">
             <h2>직장인용 30초 학습법</h2>
             <ol>
@@ -182,6 +193,38 @@
           <p class="listen-note">마지막 문제 뒤에는 처음부터 다음 회차가 자동 재생됩니다.</p>
         </section>
 
+        <section class="screen story-screen" data-screen="story" hidden>
+          <div class="study-topbar">
+            <button class="back-button" type="button" data-stop-story>■ 이야기 종료</button>
+            <div class="progress-copy">
+              <strong data-story-progress>1 / 10</strong>
+              <small data-story-episode>제1화</small>
+            </div>
+          </div>
+          <div class="progress-track" aria-hidden="true"><span data-story-progress-bar></span></div>
+
+          <article class="story-reader">
+            <div class="story-reader-heading">
+              <span data-story-phase>이야기 듣는 중</span>
+              <span class="story-sound" data-story-sound aria-hidden="true">♪</span>
+            </div>
+            <p class="eyebrow" data-story-title></p>
+            <h2 data-story-scene-title></h2>
+            <div class="story-text" data-story-text></div>
+            <section class="story-memory-box">
+              <span>이 장면의 기억 주문</span>
+              <div data-story-mnemonics></div>
+            </section>
+          </article>
+
+          <div class="story-controls">
+            <button type="button" data-story-prev>이전 장면</button>
+            <button type="button" data-story-toggle>일시정지</button>
+            <button type="button" data-story-next>다음 장면</button>
+          </div>
+          <button class="story-restart" type="button" data-story-restart>1화 처음부터 다시 듣기</button>
+        </section>
+
         <section class="screen finish-screen" data-screen="finish" hidden>
           <section class="finish-card">
             <div class="finish-mark" aria-hidden="true">✓</div>
@@ -227,6 +270,7 @@
     <div class="toast" data-toast hidden></div>
 
     <script src="./cards-data.js?v=1"></script>
-    <script src="./app.js?v=7"></script>
+    <script src="./stories-data.js?v=1"></script>
+    <script src="./app.js?v=8"></script>
   </body>
 </html>

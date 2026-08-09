@@ -3,16 +3,18 @@
 
   const DATA = window.FIRE_STUDY_DATA || { metadata: {}, cards: [] };
   const CARDS = Array.isArray(DATA.cards) ? DATA.cards : [];
+  const STORIES = Array.isArray(window.FIRE_STUDY_STORIES) ? window.FIRE_STUDY_STORIES : [];
   const PROGRESS_KEY = "fire-study-progress-v1";
   const SETTINGS_KEY = "fire-study-settings-v1";
   const RELEASE_KEY = "fire-study-release-seen";
   const LISTENING_KEY = "fire-study-listening-position-v1";
   const STUDY_SESSION_KEY = "fire-study-active-session-v1";
+  const STORY_KEY = "fire-study-story-position-v1";
   const APP_RELEASE = {
-    id: "2026-08-08-curriculum-order-v1",
-    date: "2026-08-08",
-    label: "2026.08.08",
-    note: "과목을 NFTC·점검표 번호 순서로 정렬"
+    id: "2026-08-09-story-episode-1",
+    date: "2026-08-09",
+    label: "2026.08.09",
+    note: "소화기구 판타지 이야기 듣기 1화 추가"
   };
   const DAY = 24 * 60 * 60 * 1000;
   const MINUTE = 60 * 1000;
@@ -41,6 +43,9 @@
     startListening: $('[data-start-listening]'),
     resumeListening: $('[data-resume-listening]'),
     resumeListeningCopy: $('[data-resume-listening-copy]'),
+    startStory: $('[data-start-story]'),
+    resumeStory: $('[data-resume-story]'),
+    resumeStoryCopy: $('[data-resume-story-copy]'),
     progress: $('[data-progress]'),
     progressBar: $('[data-progress-bar]'),
     studyKind: $('[data-study-kind]'),
@@ -68,6 +73,18 @@
     listenCountdown: $('[data-listen-countdown]'),
     listenSeconds: $('[data-listen-seconds]'),
     listenToggle: $('[data-listen-toggle]'),
+    storyProgress: $('[data-story-progress]'),
+    storyProgressBar: $('[data-story-progress-bar]'),
+    storyEpisode: $('[data-story-episode]'),
+    storyPhase: $('[data-story-phase]'),
+    storySound: $('[data-story-sound]'),
+    storyTitle: $('[data-story-title]'),
+    storySceneTitle: $('[data-story-scene-title]'),
+    storyText: $('[data-story-text]'),
+    storyMnemonics: $('[data-story-mnemonics]'),
+    storyToggle: $('[data-story-toggle]'),
+    storyPrev: $('[data-story-prev]'),
+    storyNext: $('[data-story-next]'),
     settingsModal: $('[data-settings-modal]'),
     sessionLimit: $('[data-session-limit]'),
     installButton: $('[data-install]'),
@@ -85,6 +102,7 @@
     settings: { sessionLimit: 20, ...loadJson(SETTINGS_KEY, {}) },
     savedListening: loadJson(LISTENING_KEY, null),
     savedStudy: loadJson(STUDY_SESSION_KEY, null),
+    savedStory: loadJson(STORY_KEY, null),
     session: [],
     sessionOriginal: [],
     cursor: 0,
@@ -100,6 +118,14 @@
       cards: [],
       index: 0,
       cycle: 1,
+      sequence: 0,
+      wakeLock: null
+    },
+    story: {
+      active: false,
+      paused: false,
+      episode: null,
+      sceneIndex: 0,
       sequence: 0,
       wakeLock: null
     }
@@ -310,6 +336,7 @@
   }
 
   function startSession(mode) {
+    if (state.story.active) stopStory(false);
     const cards = filteredCards();
     if (!cards.length) {
       showToast("선택한 범위에 학습할 카드가 없습니다.");
@@ -586,6 +613,7 @@
   }
 
   function beginListening(cards, index = 0, cycle = 1) {
+    if (state.story.active) stopStory(false);
     stopListening(false);
     state.listening.active = true;
     state.listening.paused = false;
@@ -692,6 +720,254 @@
     playListenQuestion(state.listening.sequence);
   }
 
+  function storySequenceValid(sequence) {
+    return state.story.active && state.story.sequence === sequence;
+  }
+
+  function storyById(id) {
+    return STORIES.find((episode) => episode.id === id) || null;
+  }
+
+  function storySegments(value) {
+    const sentences = String(value || "")
+      .split(/\n+/)
+      .flatMap((paragraph) => paragraph.match(/[^.!?。！？]+[.!?。！？]?/g) || [paragraph])
+      .map((sentence) => sentence.trim())
+      .filter(Boolean);
+    return sentences.flatMap((sentence) => {
+      if (sentence.length <= 150) return [sentence];
+      const pieces = sentence.split(/(?<=[,，;；:])\s*/).filter(Boolean);
+      if (pieces.length > 1) return pieces;
+      const chunks = [];
+      for (let index = 0; index < sentence.length; index += 130) chunks.push(sentence.slice(index, index + 130));
+      return chunks;
+    });
+  }
+
+  function storySpeak(text, rate, sequence) {
+    return new Promise((resolve) => {
+      if (!storySequenceValid(sequence)) {
+        resolve(false);
+        return;
+      }
+      const utterance = new SpeechSynthesisUtterance(speechText(text));
+      const voice = koreanVoice();
+      utterance.lang = voice?.lang || "ko-KR";
+      if (voice) utterance.voice = voice;
+      utterance.rate = rate;
+      utterance.pitch = 1;
+      utterance.volume = 1;
+      utterance.onend = () => resolve(storySequenceValid(sequence));
+      utterance.onerror = () => resolve(false);
+      window.speechSynthesis.speak(utterance);
+    });
+  }
+
+  function renderStoryScene() {
+    const episode = state.story.episode;
+    const scene = episode?.scenes?.[state.story.sceneIndex];
+    if (!episode || !scene) return;
+    const total = episode.scenes.length;
+    dom.storyProgress.textContent = `${state.story.sceneIndex + 1} / ${total}`;
+    dom.storyProgressBar.style.width = `${((state.story.sceneIndex + 1) / total) * 100}%`;
+    dom.storyEpisode.textContent = `제${episode.episode}화 · ${episode.subject}`;
+    dom.storyTitle.textContent = episode.title;
+    dom.storySceneTitle.textContent = scene.title;
+    dom.storyText.replaceChildren();
+    String(scene.text || "").split(/\n+/).filter(Boolean).forEach((paragraph) => {
+      const element = document.createElement("p");
+      element.textContent = paragraph;
+      dom.storyText.append(element);
+    });
+    dom.storyMnemonics.replaceChildren();
+    (scene.mnemonics || []).forEach((mnemonic) => {
+      const chip = document.createElement("b");
+      chip.textContent = mnemonic;
+      dom.storyMnemonics.append(chip);
+    });
+    dom.storyPrev.disabled = state.story.sceneIndex === 0;
+    dom.storyNext.textContent = state.story.sceneIndex === total - 1 ? "이야기 마침" : "다음 장면";
+    dom.storyToggle.disabled = false;
+    dom.storyToggle.textContent = state.story.paused ? "계속 듣기" : "일시정지";
+    dom.storyPhase.textContent = state.story.paused ? "일시정지됨" : "이야기 듣는 중";
+    dom.storySound.textContent = state.story.paused ? "Ⅱ" : "♪";
+    dom.storySound.className = `story-sound${state.story.paused ? " is-paused" : ""}`;
+  }
+
+  function updateResumeStory() {
+    const saved = state.savedStory;
+    const episode = storyById(saved?.episodeId);
+    if (!saved || !episode?.scenes?.length) {
+      dom.resumeStory.hidden = true;
+      return;
+    }
+    const sceneIndex = Math.max(0, Math.min(Number(saved.sceneIndex || 0), episode.scenes.length - 1));
+    dom.resumeStoryCopy.textContent = `${episode.episode}화 · ${sceneIndex + 1} / ${episode.scenes.length} · ${episode.scenes[sceneIndex].title}`;
+    dom.resumeStory.hidden = false;
+  }
+
+  function saveStoryPosition() {
+    if (!state.story.active || !state.story.episode?.scenes?.length) return;
+    const saved = {
+      episodeId: state.story.episode.id,
+      sceneIndex: state.story.sceneIndex,
+      updatedAt: Date.now()
+    };
+    state.savedStory = saved;
+    try {
+      localStorage.setItem(STORY_KEY, JSON.stringify(saved));
+    } catch {
+      // 저장 공간이 막혀 있어도 현재 이야기는 계속 재생합니다.
+    }
+    updateResumeStory();
+  }
+
+  function clearStoryPosition() {
+    state.savedStory = null;
+    try {
+      localStorage.removeItem(STORY_KEY);
+    } catch {
+      // 저장 공간이 막혀 있어도 완독 처리는 계속합니다.
+    }
+    updateResumeStory();
+  }
+
+  async function requestStoryWakeLock() {
+    if (!("wakeLock" in navigator) || document.visibilityState !== "visible") return;
+    try {
+      state.story.wakeLock = await navigator.wakeLock.request("screen");
+    } catch {
+      state.story.wakeLock = null;
+    }
+  }
+
+  function finishStory() {
+    if (!state.story.episode) return;
+    state.story.active = false;
+    state.story.paused = false;
+    state.story.sequence += 1;
+    state.story.wakeLock?.release?.().catch(() => {});
+    state.story.wakeLock = null;
+    clearStoryPosition();
+    dom.storyPhase.textContent = `${state.story.episode.episode}화 완독`;
+    dom.storySound.textContent = "✓";
+    dom.storySound.className = "story-sound is-complete";
+    dom.storyToggle.textContent = "재생 완료";
+    dom.storyToggle.disabled = true;
+    dom.storyNext.disabled = true;
+    showToast(`${state.story.episode.subject} 이야기 ${state.story.episode.episode}화를 모두 들었습니다.`);
+  }
+
+  async function narrateStoryScene(sequence) {
+    if (!storySequenceValid(sequence)) return;
+    const scene = state.story.episode?.scenes?.[state.story.sceneIndex];
+    if (!scene) return;
+    renderStoryScene();
+    saveStoryPosition();
+    const parts = [`${state.story.sceneIndex + 1}장. ${scene.title}`, ...storySegments(scene.text)];
+    if (scene.mnemonics?.length) parts.push(`이 장면의 기억 주문. ${scene.mnemonics.join(". ")}`);
+    for (const part of parts) {
+      if (!(await storySpeak(part, 0.92, sequence))) return;
+    }
+    if (!storySequenceValid(sequence)) return;
+    if (state.story.sceneIndex >= state.story.episode.scenes.length - 1) {
+      finishStory();
+      return;
+    }
+    state.story.sceneIndex += 1;
+    state.story.sequence += 1;
+    narrateStoryScene(state.story.sequence);
+  }
+
+  function beginStory(episode, sceneIndex = 0) {
+    if (!episode?.scenes?.length) {
+      showToast("재생할 이야기를 찾지 못했습니다.");
+      return;
+    }
+    if (state.listening.active) stopListening(false);
+    if (state.studyActive) {
+      saveStudySession();
+      state.studyActive = false;
+    }
+    if (state.story.active) stopStory(false);
+    state.story.active = true;
+    state.story.paused = false;
+    state.story.episode = episode;
+    state.story.sceneIndex = Math.max(0, Math.min(Number(sceneIndex || 0), episode.scenes.length - 1));
+    state.story.sequence += 1;
+    dom.storyNext.disabled = false;
+    showScreen("story");
+    requestStoryWakeLock();
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.resume();
+    narrateStoryScene(state.story.sequence);
+  }
+
+  function startStory() {
+    if (!speechSupported()) {
+      showToast("이 브라우저에서는 이야기 음성 듣기를 지원하지 않습니다.");
+      return;
+    }
+    beginStory(STORIES[0], 0);
+  }
+
+  function resumeSavedStory() {
+    if (!speechSupported()) {
+      showToast("이 브라우저에서는 이야기 음성 듣기를 지원하지 않습니다.");
+      return;
+    }
+    const saved = state.savedStory;
+    const episode = storyById(saved?.episodeId);
+    if (!saved || !episode) {
+      updateResumeStory();
+      showToast("이어 들을 이야기를 찾지 못했습니다.");
+      return;
+    }
+    const sceneIndex = Math.max(0, Math.min(Number(saved.sceneIndex || 0), episode.scenes.length - 1));
+    beginStory(episode, sceneIndex);
+    showToast(`${sceneIndex + 1}번째 장면부터 이어 듣습니다.`);
+  }
+
+  function stopStory(showHome = true) {
+    saveStoryPosition();
+    state.story.active = false;
+    state.story.paused = false;
+    state.story.sequence += 1;
+    if (speechSupported()) window.speechSynthesis.cancel();
+    state.story.wakeLock?.release?.().catch(() => {});
+    state.story.wakeLock = null;
+    updateResumeStory();
+    if (showHome) {
+      showScreen("home");
+      updateDashboard();
+    }
+  }
+
+  function changeStoryScene(offset) {
+    if (!state.story.episode?.scenes?.length) return;
+    const nextIndex = Math.max(0, Math.min(state.story.sceneIndex + offset, state.story.episode.scenes.length - 1));
+    if (nextIndex === state.story.sceneIndex && offset > 0) {
+      finishStory();
+      return;
+    }
+    state.story.active = true;
+    state.story.paused = false;
+    state.story.sceneIndex = nextIndex;
+    state.story.sequence += 1;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.resume();
+    dom.storyNext.disabled = false;
+    narrateStoryScene(state.story.sequence);
+  }
+
+  function toggleStory() {
+    if (!state.story.active) return;
+    state.story.paused = !state.story.paused;
+    if (state.story.paused) window.speechSynthesis.pause();
+    else window.speechSynthesis.resume();
+    renderStoryScene();
+  }
+
   function currentCard() {
     return state.session[state.cursor];
   }
@@ -777,6 +1053,7 @@
       state.studyActive = false;
     }
     if (state.listening.active) stopListening(false);
+    if (state.story.active) stopStory(false);
     showScreen("home");
     updateDashboard();
   }
@@ -855,10 +1132,17 @@
     dom.resumeStudy.addEventListener("click", resumeSavedStudy);
     dom.startListening.addEventListener("click", startListening);
     dom.resumeListening.addEventListener("click", resumeSavedListening);
+    dom.startStory.addEventListener("click", startStory);
+    dom.resumeStory.addEventListener("click", resumeSavedStory);
     $('[data-stop-listening]').addEventListener("click", () => stopListening(true));
     dom.listenToggle.addEventListener("click", toggleListening);
     $('[data-listen-answer]').addEventListener("click", listenAnswerNow);
     $('[data-listen-next]').addEventListener("click", listenNext);
+    $('[data-stop-story]').addEventListener("click", () => stopStory(true));
+    dom.storyToggle.addEventListener("click", toggleStory);
+    dom.storyPrev.addEventListener("click", () => changeStoryScene(-1));
+    dom.storyNext.addEventListener("click", () => changeStoryScene(1));
+    $('[data-story-restart]').addEventListener("click", () => beginStory(STORIES[0], 0));
     dom.reveal.addEventListener("click", revealMnemonic);
     $$('[data-rating]').forEach((button) => button.addEventListener("click", () => rateCard(button.dataset.rating)));
     $$('[data-go-home]').forEach((button) => button.addEventListener("click", goHome));
@@ -886,12 +1170,15 @@
       if (document.visibilityState === "hidden") {
         saveStudySession();
         saveListeningPosition();
+        saveStoryPosition();
       }
       if (state.listening.active && document.visibilityState === "visible" && !state.listening.wakeLock) requestWakeLock();
+      if (state.story.active && document.visibilityState === "visible" && !state.story.wakeLock) requestStoryWakeLock();
     });
     window.addEventListener("beforeunload", () => {
       saveStudySession();
       saveListeningPosition();
+      saveStoryPosition();
       if (speechSupported()) window.speechSynthesis.cancel();
     });
     window.addEventListener("keydown", (event) => {
@@ -941,6 +1228,7 @@
     setDataVersion();
     updateResumeStudy();
     updateResumeListening();
+    updateResumeStory();
     dom.sessionLimit.value = String(state.settings.sessionLimit);
     registerServiceWorker();
   }
