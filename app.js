@@ -11,10 +11,10 @@
   const STUDY_SESSION_KEY = "fire-study-active-session-v1";
   const STORY_KEY = "fire-study-story-position-v1";
   const APP_RELEASE = {
-    id: "2026-08-09-story-episode-1",
+    id: "2026-08-09-voice-sample-scene-1",
     date: "2026-08-09",
     label: "2026.08.09",
-    note: "소화기구 판타지 이야기 듣기 1화 추가"
+    note: "소화기구 이야기 1장 3인 AI 음성·배경음 샘플 추가"
   };
   const DAY = 24 * 60 * 60 * 1000;
   const MINUTE = 60 * 1000;
@@ -44,6 +44,9 @@
     resumeListening: $('[data-resume-listening]'),
     resumeListeningCopy: $('[data-resume-listening-copy]'),
     startStory: $('[data-start-story]'),
+    startVoiceSample: $('[data-start-voice-sample]'),
+    voiceSample: $('[data-voice-sample]'),
+    voiceSampleAudio: $('[data-voice-sample-audio]'),
     resumeStory: $('[data-resume-story]'),
     resumeStoryCopy: $('[data-resume-story-copy]'),
     progress: $('[data-progress]'),
@@ -336,6 +339,7 @@
   }
 
   function startSession(mode) {
+    dom.voiceSampleAudio?.pause();
     if (state.story.active) stopStory(false);
     const cards = filteredCards();
     if (!cards.length) {
@@ -613,6 +617,7 @@
   }
 
   function beginListening(cards, index = 0, cycle = 1) {
+    dom.voiceSampleAudio?.pause();
     if (state.story.active) stopStory(false);
     stopListening(false);
     state.listening.active = true;
@@ -884,6 +889,7 @@
       showToast("재생할 이야기를 찾지 못했습니다.");
       return;
     }
+    dom.voiceSampleAudio?.pause();
     if (state.listening.active) stopListening(false);
     if (state.studyActive) {
       saveStudySession();
@@ -909,6 +915,22 @@
       return;
     }
     beginStory(STORIES[0], 0);
+  }
+
+  async function startVoiceSample() {
+    if (state.listening.active) stopListening(false);
+    if (state.story.active) stopStory(false);
+    if (state.studyActive) {
+      saveStudySession();
+      state.studyActive = false;
+    }
+    dom.voiceSample.hidden = false;
+    dom.voiceSample.scrollIntoView({ behavior: "smooth", block: "center" });
+    try {
+      await dom.voiceSampleAudio.play();
+    } catch {
+      showToast("재생 버튼을 한 번 더 눌러주세요.");
+    }
   }
 
   function resumeSavedStory() {
@@ -1133,6 +1155,7 @@
     dom.startListening.addEventListener("click", startListening);
     dom.resumeListening.addEventListener("click", resumeSavedListening);
     dom.startStory.addEventListener("click", startStory);
+    dom.startVoiceSample.addEventListener("click", startVoiceSample);
     dom.resumeStory.addEventListener("click", resumeSavedStory);
     $('[data-stop-listening]').addEventListener("click", () => stopListening(true));
     dom.listenToggle.addEventListener("click", toggleListening);
