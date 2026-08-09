@@ -84,6 +84,11 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("audio", type=Path)
     parser.add_argument("clips", type=Path)
+    parser.add_argument(
+        "--compact-openai",
+        action="store_true",
+        help="OpenAI의 자연스러운 짧은 두 번째 대사 뒤에 남는 과도한 공백을 줄입니다.",
+    )
     args = parser.parse_args()
 
     original = read_wav(args.audio)
@@ -108,6 +113,24 @@ def main() -> None:
             duck = 0.65 if abs(voice_sample) > 180 else 1.0
             mixed = voice_sample + background_at(index / SAMPLE_RATE, duration) * duck
             result[index] = max(-32768, min(32767, round(mixed)))
+
+    if args.compact_openai:
+        # The original slow character clip occupied this interval. Keep a natural
+        # conversational pause, then crossfade the continuous music into Taehoo.
+        cut_from = round(142.70 * SAMPLE_RATE)
+        cut_to = round(146.95 * SAMPLE_RATE)
+        fade_length = round(0.08 * SAMPLE_RATE)
+        crossfade = array.array("h")
+        for offset in range(fade_length):
+            ratio = offset / max(1, fade_length - 1)
+            left = result[cut_from - fade_length + offset]
+            right = result[cut_to + offset]
+            crossfade.append(round(left * (1 - ratio) + right * ratio))
+        result = (
+            result[: cut_from - fade_length]
+            + crossfade
+            + result[cut_to + fade_length :]
+        )
 
     write_wav(args.audio, result)
     print(f"수지 음성 3개 구간 교체 완료: {args.audio}")
